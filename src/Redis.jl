@@ -1,17 +1,39 @@
 module Redis
 
-#import Base.TcpSocket
-export redis_type, client
+import Base.TcpSocket
+export client
 
-CRLF = "\r\n"
 CRLFc = ['\r', '\n']
+CRLF = join(CRLFc)
 EXPECTATIONS = {
 	Bool => Set(["hexists", "exists", "sismember", "hset", "sadd"]),
 	Int => Set(["hklen", "scard", "llen", "strlen"]),
 	Array => Set(["hkeys", "keys"]),
 	Dict => Set(["hgetall"]),
 	Set => Set(["smembers"]),
-	String => Set(["set", "get"])
+	String => Set(["set", "get", "type"]),
+
+	"hexists"   => Bool,
+	"exists"    => Bool,
+	"sismember" => Bool,
+	"hset"      => Bool,
+	"sadd"      => Bool,
+
+	"smembers"  => Set,
+
+	"hgetall"   => Dict,
+
+	"hkeys"     => Array,
+	"keys"      => Array,
+
+	"set"       => String,
+	"get"       => String,
+	"type"      => String,
+
+	"hklen"     => Int,
+	"scard"     => Int, 
+	"llen"      => Int, 
+	"strlen"    => Int
 }
 
 redis_type(arg::String; simple::Bool=false) = (simple ? string('+', arg, CRLF ) : string('$', join([length(arg), arg], CRLF), CRLF))
@@ -20,28 +42,31 @@ redis_type(arg::UnionType)                  = string('$', string(-1), CRLF) # ak
 redis_type(arg::Array)                      = string('*', string(length(arg)), CRLF, mapreduce(redis_type, *, arg))
 redis_type(arg::Tuple)                      = string(collect(arg))
 
-function decode_response(sock::IO, cmd_called)
+function decode_response(sock::IO, cmd_called, sub_parse=false)
 	resp = readuntil(sock, CRLF)
 	resp = strip(resp, CRLFc)
-#	println("running command $cmd_called resp $(resp)\nBools $(EXPECTATIONS[Bool])\nInts $(EXPECTATIONS[Int])")
+#	println("running command '$cmd_called' resp '$resp'")
 	if resp[1] == '+'
-		if lowercase(cmd_called) in EXPECTATIONS[String]
+#		decode_type(resp, EXPECTATIONS[cmd_called])
+		if lowercase(cmd_called) in EXPECTATIONS[String] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 			return resp[2:end]
 		else
 			throw(KeyError(EXPECTATIONS))
 		end
 	elseif resp[1] == ':'
-		if lowercase(cmd_called) in EXPECTATIONS[Int]
+#		decode_type(resp, EXPECTATIONS[cmd_called])
+		if lowercase(cmd_called) in EXPECTATIONS[Int] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 			return parseint(resp[2:end])
-		elseif lowercase(cmd_called) in EXPECTATIONS[Bool]
+		elseif lowercase(cmd_called) in EXPECTATIONS[Bool] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 			return parseint(resp[2:end]) > 0
 		else
 			throw(KeyError(EXPECTATIONS))
 		end
 	elseif resp[1] == '-'
-		error(resp[2:end])
+		decode_type(resp, Exception)
 	elseif resp[1] == '$'
-		if lowercase(cmd_called) in EXPECTATIONS[String]
+#		decode_type(sock, EXPECTATIONS[cmd_called])
+		if lowercase(cmd_called) in EXPECTATIONS[String] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 			len = parseint(resp[2:end])
 			r = join(map(char,readbytes(sock, len)))
 			readuntil(sock, CRLF)
@@ -50,27 +75,55 @@ function decode_response(sock::IO, cmd_called)
 			throw(KeyError(EXPECTATIONS))
 		end
 	elseif resp[1] == '*'
+#		decode_type(resp, EXPECTATIONS[cmd_called])
+		len = parseint(resp[2:end])
 		if lowercase(cmd_called) in EXPECTATIONS[Dict]
-			r = [decode_response(sock, cmd_called) for i = 1:parseint(resp[2:end])]
+			r = [decode_response(sock, cmd_called, true) for i = 1:len]
 			ret = Dict{String,Any}()
 			while !isempty(r)
 				merge!(ret, [shift!(r) => shift!(r)])
 			end
 			return ret
 		elseif lowercase(cmd_called) in EXPECTATIONS[Set]
-			return Set{String}([decode_response(sock, cmd_called) for i = 1:parseint(resp[2:end])])
+			return Set{String}([decode_response(sock, cmd_called, true) for i = 1:len])
+		elseif lowercase(cmd_called) in EXPECTATIONS[Array]
+			return [decode_response(sock, cmd_called, true) for i = 1:len]
 		else
-			return [decode_response(sock, cmd_called) for i = 1:parseint(resp[2:end])]
+			throw(KeyError(EXPECTATIONS))
 		end
 	else
 		println("resp '$resp' == $(char(resp) == '+')")
+		throw(KeyError(EXPECTATIONS))
 	end
+end
+
+decode_type(response, expected_type::String)    = response[2:end]
+decode_type(response, expected_type::Int)       = parseint(response[2:end])
+decode_type(response, expected_type::Bool)      = parseint(response[2:end]) > 0
+decode_type(response, expected_type::Exception) = error(response[2:end])
+
+function decode_type(sock, expected_type::Dict)
+	r = [decode_response(sock, cmd_called, true) for i = 1:parseint(resp[2:end])]
+	ret = Dict{String,Any}()
+	while !isempty(r)
+		merge!(ret, [shift!(r) => shift!(r)])
+	end
+	return ret
+end
+decode_type(sock, expected_type::Set) = Set{String}([decode_response(sock, cmd_called, true) for i = 1:parseint(resp[2:end])])
+decode_type(sock, expected_type::Array) = [decode_response(sock, cmd_called, true) for i = 1:parseint(resp[2:end])]
+function decode_type(sock, expected_type::String)
+	len = parseint(resp[2:end])
+	r = join(map(char,readbytes(sock, len)))
+	readuntil(sock, CRLF)
+	return r
 end
 
 client(socket_path::String; password=None, db=0)            = connect(socket_path)
 client(;host=ip"127.0.0.1", port=6379, password=None, db=0) = connect(host, port)
 
-send(sock::IO, redis_cmd, args...)        = ( write(sock, redis_type([redis_cmd, args])); decode_response(sock, redis_cmd[1]) )
+send(sock::TcpSocket, redis_cmd::String, args...)        = ( write(sock, redis_type([redis_cmd, args...])); decode_response(sock, redis_cmd) )
+send(sock::IOBuffer, redis_cmd::String, args...)        = ( write(sock, redis_type([redis_cmd, args...])); seekstart(sock); decode_response(sock, redis_cmd) )
 
 function set(sock::IO, key::String, value::Any; sec_expire::Int=-1, ms_expire::Float64=-1.0, not_exists::Bool=false, if_exists::Bool=false)
 	cmd_msg = String["SET", key, value]
