@@ -208,7 +208,7 @@ bitcount(sock::IO,      key::String,                  start::Int64=0,     nd::In
 bitop(sock::IO,         op::String,                   destkey::String,    key::String...)                 = send(sock, "BITOP",             op,              destkey,       key...)
 bitpos(sock::IO,        key::String,                  bit::Int,           start::Int64=0,  nd::Int64=-1)  = send(sock, "BITPOS",            key,             string(bit),   string(start),  string(nd))
 getbit(sock::IO,        key::String,                  bit::Int)                                           = send(sock, "GETBIT",            key,             string(bit))
-setbit(sock::IO,  key::String,      bit::Int,          value::Any) = send(sock, "SETBIT",          key,          string(bit),            string(value))
+setbit(sock::IO,        key::String,                  bit::Int,           value::Any)                     = send(sock, "SETBIT",            key,             string(bit),   string(value))
 
 decr(sock::IO,          key::String)                                                                      = send(sock, "DECR",              key)
 decrby(sock::IO,        key::String,                  by::Int64)                                          = send(sock, "DECRBY",            key,             string(by))
