@@ -237,7 +237,7 @@ mset(sock::IO,          key_val::Array{ASCIIString};  not_exists=false)         
 mset(sock::IO,          key_val::Array;               not_exists=false)                                   = mset(sock, collect(map(string,  key_val)),       not_exists=not_exists)
 mset(sock::IO,          keys::Any...;                 not_exists=false)                                   = mset(sock, collect(map(string,  keys)),          not_exists=not_exists)
 msetnx(sock::IO,        key_val::Array)                                                                   = mset(sock, collect(map(string,  key_val)),       not_exists=true)
-msetnx(sock::IO,        keys::Any...)                                                                     = mset(sock, collect(map(string,  key_val)),       not_exists=true)
+msetnx(sock::IO,        keys::Any...)                                                                     = mset(sock, collect(map(string,  keys)),          not_exists=true)
 
 function set(sock::IO, key::String, value::Any; sec_expire::Int=-1, ms_expire::Int=-1, not_exists::Bool=false, if_exists::Bool=false)
 	cmd_msg = String["SET", key, value]
