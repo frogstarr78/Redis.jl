@@ -25,6 +25,7 @@ EXPECTATIONS = {
 		"pttl",
 		"scard",
 		"setbit",
+		"setrange",
 		"strlen",
 		"ttl"
 	]),
@@ -219,7 +220,7 @@ incrby(sock::IO,        key::String,                  by::Int64)                
 incrbyfloat(sock::IO,   key::String,                  by::Real)                                           = send(sock, "INCRBYFLOAT",       key,             string(by))
 
 getrange(sock::IO,      key::String,                  start::Int64,       nd::Int64)                      = send(sock, "GETRANGE",          key,             string(start), string(nd))
-#setrange
+setrange(sock::IO,      key::String,                  start::Int64,       value::Any)                     = send(sock, "SETRANGE",          key,             string(start),        string(value))
 getset(sock::IO,        key::String,                  val::String)                                        = send(sock, "GETSET",            key,             val)
 
 get(sock::IO,           key::String)                                                                      = send(sock, "GET",               key)

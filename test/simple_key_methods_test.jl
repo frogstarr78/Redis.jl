@@ -81,9 +81,11 @@ function test_standard_key_methods(client)
 	@test Redis.get(client, "CHARVAL") == "c"
 	@test Redis.get(client, "HELLO") == "The quick brown fox jumped over the lazy dog."
 	@test Redis.getrange(client, "HELLO", 4, 8) == "quick"
+	@test Redis.setrange(client, "HELLO", 4, "dumb") == 45
+	@test Redis.get(client, "HELLO") == "The dumbk brown fox jumped over the lazy dog."
 	@test Redis.strlen(client, "HELLO") == 45
-	@test Redis.bitcount(client, "HELLO") == 167
-	@test Redis.bitcount(client, "HELLO", 0, -1) == 167
+	@test Redis.bitcount(client, "HELLO") == 166
+	@test Redis.bitcount(client, "HELLO", 0, -1) == 166
 	@test Redis.bitcount(client, "HELLO", 1, 3) == 8
 	@test Redis.bitpos(client, "HELLO", 1) == 1
 	@test Redis.bitpos(client, "HELLO", 0) == 0
@@ -95,7 +97,7 @@ function test_standard_key_methods(client)
 	@test Redis.getbit(client, "HELLO", 11) == 0
 	@test Redis.setbit(client, "HELLO", 11, 1) == 0
 	@test Redis.getbit(client, "HELLO", 11) == 1
-	@test Redis.getset(client, "HELLO", "Nothing new") == "Txe quick brown fox jumped over the lazy dog."
+	@test Redis.getset(client, "HELLO", "Nothing new") == "Txe dumbk brown fox jumped over the lazy dog."
 	@test Redis.get(client, "HELLO") == "Nothing new"
 	@test Redis.ttl(client, "HELLO") == -1
 	@test Redis.pttl(client, "HELLO") == -1
