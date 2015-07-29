@@ -1,14 +1,9 @@
 using Redis
 using Base.Test
 
-function test_methods(io)
+include("test_client.jl")
+
+function test_methods(client)
 end
 
-run(`redis-server ${pwd()}/etc/redis.conf`)
-try
-	test_methods(client(port=9999))
-catch e
-	error(e)
-finally
-	run(`redis-cli -p 9999 SHUTDOWN`)
-end
+test_client_with(test_methods)

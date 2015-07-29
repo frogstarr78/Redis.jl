@@ -6,8 +6,8 @@ export client
 CRLFc = ['\r', '\n']
 CRLF = join(CRLFc)
 EXPECTATIONS = {
-	Array => Set(["hkeys", "keys", "mget"]),
-	Bool => Set(["hexists", "exists", "sismember", "hset", "sadd", "del", "msetnx"]),
+	Array => Set(["hkeys", "keys", "mget", "smembers"]),
+	Bool => Set(["hexists", "exists", "sismember", "hset", "del", "msetnx"]),
 	Dict => Set(["hgetall"]),
 	Float64 => Set(["incrbyfloat"]),
 	Int => Set([
@@ -24,8 +24,10 @@ EXPECTATIONS = {
 		"llen",
 		"pttl",
 		"scard",
+		"sadd",
 		"setbit",
 		"setrange",
+		"smove",
 		"strlen",
 		"ttl"
 	]),
@@ -140,7 +142,6 @@ function client(;socket::String="", host=ip"127.0.0.1", port=6379, password=None
 end
 
 send(sock::TcpSocket,          redis_cmd::String, args...) = ( write(sock, redis_type([redis_cmd, args...]));                     decode_response(sock, redis_cmd) )
-send(sock::IOBuffer,           redis_cmd::String, args...) = ( write(sock, redis_type([redis_cmd, args...])); seekstart(sock);    decode_response(sock, redis_cmd) )
 #client_send(sock::TcpSocket,  redis_cmd::String, args...) = ( write(sock, redis_type([string("CLIENT ",  redis_cmd), args...])); decode_response(sock, redis_cmd) )
 #cluster_send(sock::TcpSocket, redis_cmd::String, args...) = ( write(sock, redis_type([string("CLUSTER ", redis_cmd), args...])); decode_response(sock, redis_cmd) )
 #command_send(sock::TcpSocket, redis_cmd::String, args...) = ( write(sock, redis_type([string("COMMAND ", redis_cmd), args...])); decode_response(sock, redis_cmd) )
@@ -148,60 +149,45 @@ send(sock::IOBuffer,           redis_cmd::String, args...) = ( write(sock, redis
 #debug_send(sock::TcpSocket,   redis_cmd::String, args...) = ( write(sock, redis_type([string("DEBUG ",   redis_cmd), args...])); decode_response(sock, redis_cmd) )
 #script_send(sock::TcpSocket,  redis_cmd::String, args...) = ( write(sock, redis_type([string("SCRIPT ",  redis_cmd), args...])); decode_response(sock, redis_cmd) )
 
-#!untyped/introspective
+#!connection group
 auth(sock::IO,          password::String)                                                                  =  send(sock, "AUTH",         password)
-bgrewriteaof(sock::IO)                                                                                     =  send(sock, "BGREWRITEAOF")
-bgsave(sock::IO)                                                                                           =  save(sock,                 background=true)
-dbsize(sock::IO)                                                                                           =  send(sock, "DBSIZE")
+#echo
+ping(sock::IO)                                                                                             =  send(sock, "PING")             
+#quit
+#select
+
+#!generic group
 del(sock::IO,           keys::String...)                                                                   =  send(sock, "DEL",          keys...)
 #dump
-#echo
-#eval
-#evalsha
+exists(sock::IO,        key::String)                                                                       =  send(sock, "EXISTS",       key)
 #expire
 #expireat
-exists(sock::IO,        key::String)                                                                       =  send(sock, "EXISTS",       key)
-flushall(sock::IO)                                                                                         =  send(sock, "FLUSHALL")
-flushdb(sock::IO)                                                                                          =  send(sock, "FLUSHDB")
-info(sock::IO)                                                                                             =  send(sock, "INFO")
 keys(sock::IO,          matching::String="*")                                                              =  send(sock, "KEYS",         matching)
-lastsave(sock::IO)                                                                                         =  send(sock, "LASTSAVE")
 #migrate
-#monitor
 #move
 #object
 #persist
 #pexpire
 #pexpireat
-ping(sock::IO)                                                                                             =  send(sock, "PING")             
 pttl(sock::IO,          key::String)                                                                       =  send(sock, "PTTL",         key)
-#quit
 #randomkey
 #rename
 #renamenx
 #restore
-#role
-save(sock::IO;          background=false)                                                                  =  send(sock, background ? "BGSAVE" : "SAVE")
 #scan
-#select
-#shutdown
-#slaveof
-#slowlog
 #sort
-#sync
-time(sock::IO)                                                                                             =  send(sock, "TIME")
 ttl(sock::IO,           key::String)                                                                       =  send(sock, "TTL",          key)
 typeof(sock::IO,        key::String)                                                                       =  send(sock, "TYPE",         key)
-#unwatch
 #wait
-#watch
 
-#!transactional
-#multi
+#!transactions group
 #discard
 #exec
+#multi
+#unwatch
+#watch
 
-#!std keys
+#!string group
 append(sock::IO,        key::String,                  val::String)                                        = send(sock, "APPEND",            key,             val)
 
 bitcount(sock::IO,      key::String,                  start::Int64=0,     nd::Int64=-1)                   = send(sock, "BITCOUNT",          key,             string(start), string(nd))
@@ -266,9 +252,9 @@ setex(sock::IO,   key::String,      seconds::Int,      value::Any) = set(sock,  
 setnx(sock::IO,   key::String,      value::Any)                    = set(sock,  key,               value,        not_exists=true)
 psetex(sock::IO,  key::String,      milliseconds::Int, value::Any) = set(sock,  key,               value,        ms_expire=milliseconds)
 strlen(sock::IO,  key::String)                                     = send(sock, "STRLEN",          key)
-#!end std keys
+#!end string group
                                                                                                            
-#!hashes
+#!hash group
 #hdel
 hexists(sock::IO,       key::String,                 hkey::Any)                                            =  send(sock, "HEXISTS",      key,         hkey)
 #hget
@@ -361,20 +347,15 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 #rpushx
 #!end lists
 
-#debug object
-#debug segfault
-
+#!scripting group
 #script exists
 #script flush
 #script kill
 #script load
+#eval
+#evalsha
 
-#client getname
-#client kill
-#client list
-#client pause
-#client setname
-
+#!cluster group
 #cluster addslots
 #cluster count-failure-reports
 #cluster countkeysinslot
@@ -394,14 +375,36 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 #cluster slaves
 #cluster slots
 
+#!server group
+bgrewriteaof(sock::IO)                                                                                     =  send(sock, "BGREWRITEAOF")
+bgsave(sock::IO)                                                                                           =  save(sock,                 background=true)
+#client getname
+#client kill
+#client list
+#client pause
+#client setname
+#command
 #command count
 #command getkeys
 #command info
-#command
-
 #config get
 #config resetstat
 #config rewrite
 #config set
+dbsize(sock::IO)                                                                                           =  send(sock, "DBSIZE")
+#debug object
+#debug segfault
+flushall(sock::IO)                                                                                         =  send(sock, "FLUSHALL")
+flushdb(sock::IO)                                                                                          =  send(sock, "FLUSHDB")
+info(sock::IO)                                                                                             =  send(sock, "INFO")
+lastsave(sock::IO)                                                                                         =  send(sock, "LASTSAVE")
+#monitor
+#role
+save(sock::IO;          background=false)                                                                  =  send(sock, background ? "BGSAVE" : "SAVE")
+#shutdown
+#slaveof
+#slowlog
+#sync
+time(sock::IO)                                                                                             =  send(sock, "TIME")
 
 end # module
