@@ -39,6 +39,18 @@ function test_expire_methods(client)
 	Redis.set(client, "KEY", 2)
 	@test Redis.ttl(client, "KEY") == -1
 	@test Redis.pttl(client, "KEY") == -1
+
+	expiry = 3
+	@test Redis.expire(client, "KEY", expiry) == true
+	sleep(expiry)
+	@test Redis.exists(client, "KEY") == false
+
+	Redis.set(client, "KEY", 2)
+	@test Redis.expire(client, "KEY", expiry) == true
+	@test Redis.persist(client, "KEY") == true
+	sleep(expiry)
+	@test Redis.exists(client, "KEY") == true
+	@test Redis.ttl(client, "KEY") == -1
 	warn("Need to make additional tests for expire methods")
 end
 
@@ -60,6 +72,7 @@ function test_long_running_bgsaves()
 end
 
 test_client_with(test_methods)
+warn("These involve time specific commands so they may take some time")
 test_client_with(test_expire_methods)
 test_client_with(test_type_methods)
 

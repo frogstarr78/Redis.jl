@@ -7,7 +7,16 @@ CRLFc = ['\r', '\n']
 CRLF = join(CRLFc)
 EXPECTATIONS = {
 	Array => Set(["hkeys", "keys", "mget", "smembers"]),
-	Bool => Set(["hexists", "exists", "sismember", "hset", "del", "msetnx"]),
+	Bool => Set([
+		"hexists",
+		"exists",
+		"expire",
+		"sismember",
+		"hset",
+		"del",
+		"msetnx",
+		"persist"
+	]),
 	Dict => Set(["hgetall"]),
 	Float64 => Set(["incrbyfloat"]),
 	Int => Set([
@@ -56,6 +65,7 @@ redis_type(arg::String; simple::Bool=false) = (simple ? string('+', arg, CRLF ) 
 redis_type(arg::UnionType)                  = string('$', -1, CRLF)
 redis_type(arg::Number)                     = string(':', arg, CRLF)
 function redis_type(arg::Array)
+	arg[1] = uppercase(arg[1])
 	len = length(arg)
 	if len == 1
 		return string('*', len, CRLF, redis_type(arg[1]))
@@ -160,13 +170,13 @@ ping(sock::IO)                                                                  
 del(sock::IO,           keys::String...)                                                                   =  send(sock, "DEL",          keys...)
 #dump
 exists(sock::IO,        key::String)                                                                       =  send(sock, "EXISTS",       key)
-#expire
+expire(sock::IO,        key::String,                  by::Int64)                                           =  send(sock, "EXPIRE",       key,                string(by))
 #expireat
 keys(sock::IO,          matching::String="*")                                                              =  send(sock, "KEYS",         matching)
 #migrate
 #move
 #object
-#persist
+persist(sock::IO,       key::String)                                                                       =  send(sock, "PERSIST",      key)
 #pexpire
 #pexpireat
 pttl(sock::IO,          key::String)                                                                       =  send(sock, "PTTL",         key)
