@@ -72,9 +72,9 @@ function test_long_running_bgsaves()
 end
 
 test_client_with(test_methods)
+test_client_with(test_type_methods)
 warn("These involve time specific commands so they may take some time")
 test_client_with(test_expire_methods)
-test_client_with(test_type_methods)
 
 ##del generic
 #dump generic

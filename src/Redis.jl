@@ -40,7 +40,9 @@ EXPECTATIONS = {
 		"strlen",
 		"ttl"
 	]),
-	Set => Set(["smembers"]),
+	Set => Set([
+		"srandmember"
+	]),
 	String => Set([
 		"auth",
 		"bgrewriteaof",
@@ -56,6 +58,7 @@ EXPECTATIONS = {
 		"ping",
 		"save",
 		"set",
+		"spop",
 		"type"
 	]),
 	TmStruct => Set(["lastsave", "time"])
@@ -98,7 +101,7 @@ function decode_response(sock::IO, cmd_called, sub_parse=false)
 	elseif resp[1] == '-'
 		error(resp[2:end])
 	elseif resp[1] == '$'
-		if lowercase(cmd_called) in EXPECTATIONS[String] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
+		if lowercase(cmd_called) in EXPECTATIONS[String] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] ) #|| lowercase(cmd_called) in EXPECTATIONS[Set]
 			len = parseint(resp[2:end])
 			if len == -1
 				return ""
@@ -290,10 +293,15 @@ sdiffstore(sock::IO,    destination::String,         key::String,          keys:
 sinter(sock::IO,        key::String,                 keys::String...)                                      =  send(sock, "SINTER",       key,         keys...)
 sinterstore(sock::IO,   destination::String,         key::String,          keys::String...)                =  send(sock, "SINTERSTORE",  destination, key,                     keys...)
 sismember(sock::IO,     key::String,                 smem::Any)                                            =  send(sock, "SISMEMBER",    key,         smem)
-smembers(sock::IO,      key::String)                                                                       =  send(sock, "SMEMBERS",     key)
+smembers(sock::IO,      key::String)                                                                       =  ( Set(send(sock, "SMEMBERS",     key)) )
 smove(sock::IO,         source::String,              destination::String,  member::Any)                    =  send(sock, "SMOVE",        source,      destination,             member)
-spop(sock::IO,          key::String,                 count::Int64=1)                                       =  send(sock, "SPOP",         key,         string(count))
-srandmember(sock::IO,   key::String,                 count::Int64=1)                                       =  send(sock, "SRANDMEMBER",  key,         string(count))
+spop(sock::IO,          key::String)                                                                       =  send(sock, "SPOP",         key)
+spop(sock::IO,          key::String,                 count::Int64=1)                                       = ( Set([ send(sock, "SPOP",  key)     for i = 1:count ]) )
+#spop(sock::IO,          key::String,                 count::Int64=1)                                       =  send(sock, "SPOP",         key,         string(count))
+# Because, according to the documentation, this feature hasn't yet been implemented server side
+# we'll fake it for now so our tests work.
+srandmember(sock::IO,   key::String)                                                                       =  send(sock, "SRANDMEMBER",  key)
+srandmember(sock::IO,   key::String,                 count::Int64)                                         =  send(sock, "SRANDMEMBER",  key,         string(count))
 srem(sock::IO,          key::String,                 members::String...)                                   =  send(sock, "SREM",         key,         members...)
 #sscan(sock::IO,        key::String,                 cursor::Int64;        matching::Regex,  count::Int64) =  send(sock, "SSCAN",        key,         cursor,      matching,  count)
 sunion(sock::IO,        key::String,                 keys::Any...)                                         =  send(sock, "SUNION",       key,         members...)
