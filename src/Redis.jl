@@ -6,7 +6,7 @@ export client
 CRLFc = ['\r', '\n']
 CRLF = join(CRLFc)
 EXPECTATIONS = {
-	Array => Set(["hkeys", "keys", "mget", "smembers"]),
+	Array => Set(["hkeys", "keys", "mget"]),
 	Bool => Set([
 		"hexists",
 		"exists",
@@ -37,11 +37,15 @@ EXPECTATIONS = {
 		"setbit",
 		"setrange",
 		"smove",
+		"srem",
 		"strlen",
+		"sunionstore",
 		"ttl"
 	]),
 	Set => Set([
-		"srandmember"
+		"smembers",
+		"srandmember",
+		"sunion"
 	]),
 	String => Set([
 		"auth",
@@ -86,6 +90,7 @@ function decode_response(sock::IO, cmd_called, sub_parse=false)
 		if lowercase(cmd_called) in EXPECTATIONS[String] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 			return resp[2:end]
 		else
+#			@printf "+cmd_called '%s'\n" cmd_called
 			throw(KeyError(EXPECTATIONS))
 		end
 	elseif resp[1] == ':'
@@ -96,12 +101,14 @@ function decode_response(sock::IO, cmd_called, sub_parse=false)
 		elseif lowercase(cmd_called) in EXPECTATIONS[Bool] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 			return parseint(resp[2:end]) > 0
 		else
+#			@printf ":cmd_called '%s'\n" cmd_called
 			throw(KeyError(EXPECTATIONS))
 		end
 	elseif resp[1] == '-'
 		error(resp[2:end])
 	elseif resp[1] == '$'
-		if lowercase(cmd_called) in EXPECTATIONS[String] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] ) #|| lowercase(cmd_called) in EXPECTATIONS[Set]
+#		@printf "sub_parse '%s', in EXPECTATIONS '%s'\n" sub_parse ( lowercase(cmd_called) in EXPECTATIONS[Array] || lowercase(cmd_called) in EXPECTATIONS[Set] )
+		if lowercase(cmd_called) in EXPECTATIONS[String] || lowercase(cmd_called) in EXPECTATIONS[Set] || ( sub_parse && ( lowercase(cmd_called) in EXPECTATIONS[Array] ) )
 			len = parseint(resp[2:end])
 			if len == -1
 				return ""
@@ -121,6 +128,7 @@ function decode_response(sock::IO, cmd_called, sub_parse=false)
 			readuntil(sock, CRLF)
 			return r
 		else
+#			@printf "\$cmd_called '%s'\n" cmd_called
 			throw(KeyError(EXPECTATIONS))
 		end
 	elseif resp[1] == '*'
@@ -144,6 +152,7 @@ function decode_response(sock::IO, cmd_called, sub_parse=false)
 #			throw(KeyError(EXPECTATIONS))
 		end
 	else
+#		@printf "*cmd_called '%s'\n" cmd_called
 		throw(KeyError(EXPECTATIONS))
 	end
 end
@@ -269,7 +278,7 @@ strlen(sock::IO,  key::String)                                     = send(sock, 
                                                                                                            
 #!hash group
 #hdel
-hexists(sock::IO,       key::String,                 hkey::Any)                                            =  send(sock, "HEXISTS",      key,         hkey)
+hexists(sock::IO,       key::String,                 hkey::Any)    =  send(sock, "HEXISTS",      key,         hkey)
 #hget
 #hgetall
 #hincrby
@@ -286,26 +295,26 @@ hexists(sock::IO,       key::String,                 hkey::Any)                 
 #!end hashes
                                                                                                            
 #!sets
-sadd(sock::IO,          key::String,                 smems::Any...)                                        =  send(sock, "SADD",         key,         smems...)
-scard(sock::IO,         key::String)                                                                       =  send(sock, "SCARD",        key)
-sdiff(sock::IO,         key::String,                 keys::String...)                                      =  send(sock, "SDIFF",        key,         keys...)
-sdiffstore(sock::IO,    destination::String,         key::String,          keys::String...)                =  send(sock, "SDIFFSTORE",   destination, key,                     keys...)
-sinter(sock::IO,        key::String,                 keys::String...)                                      =  send(sock, "SINTER",       key,         keys...)
-sinterstore(sock::IO,   destination::String,         key::String,          keys::String...)                =  send(sock, "SINTERSTORE",  destination, key,                     keys...)
-sismember(sock::IO,     key::String,                 smem::Any)                                            =  send(sock, "SISMEMBER",    key,         smem)
-smembers(sock::IO,      key::String)                                                                       =  ( Set(send(sock, "SMEMBERS",     key)) )
-smove(sock::IO,         source::String,              destination::String,  member::Any)                    =  send(sock, "SMOVE",        source,      destination,             member)
-spop(sock::IO,          key::String)                                                                       =  send(sock, "SPOP",         key)
-spop(sock::IO,          key::String,                 count::Int64=1)                                       = ( Set([ send(sock, "SPOP",  key)     for i = 1:count ]) )
-#spop(sock::IO,          key::String,                 count::Int64=1)                                       =  send(sock, "SPOP",         key,         string(count))
+sadd(sock::IO,          key::String,                 smems::Any...)                                             =  send(sock, "SADD",         key,         smems...)
+scard(sock::IO,         key::String)                                                                            =  send(sock, "SCARD",        key)
+sdiff(sock::IO,         key::String,                 keys::String...)                                           =  send(sock, "SDIFF",        key,         keys...)
+sdiffstore(sock::IO,    destination::String,         key::String,          keys::String...)                     =  send(sock, "SDIFFSTORE",   destination, key,                     keys...)
+sinter(sock::IO,        key::String,                 keys::String...)                                           =  send(sock, "SINTER",       key,         keys...)
+sinterstore(sock::IO,   destination::String,         key::String,          keys::String...)                     =  send(sock, "SINTERSTORE",  destination, key,                     keys...)
+sismember(sock::IO,     key::String,                 smem::Any)                                                 =  send(sock, "SISMEMBER",    key,         smem)
+smembers(sock::IO,      key::String)                                                                            =  send(sock, "SMEMBERS",     key)
+smove(sock::IO,         source::String,              destination::String,  member::Any)                         =  send(sock, "SMOVE",        source,      destination,             member)
+spop(sock::IO,          key::String)                                                                            =  send(sock, "SPOP",         key)
+spop(sock::IO,          key::String,                 count::Int64)                                              = ( Set([ send(sock, "SPOP",  key)     for i = 1:count ]) )
+#spop(sock::IO,          key::String,                 count::Int64)                                              =  send(sock, "SPOP",         key,         string(count))
 # Because, according to the documentation, this feature hasn't yet been implemented server side
 # we'll fake it for now so our tests work.
-srandmember(sock::IO,   key::String)                                                                       =  send(sock, "SRANDMEMBER",  key)
-srandmember(sock::IO,   key::String,                 count::Int64)                                         =  send(sock, "SRANDMEMBER",  key,         string(count))
-srem(sock::IO,          key::String,                 members::String...)                                   =  send(sock, "SREM",         key,         members...)
-#sscan(sock::IO,        key::String,                 cursor::Int64;        matching::Regex,  count::Int64) =  send(sock, "SSCAN",        key,         cursor,      matching,  count)
-sunion(sock::IO,        key::String,                 keys::Any...)                                         =  send(sock, "SUNION",       key,         members...)
-sunionstore(sock::IO,   destination::String,         key::String,          keys::String...)                =  send(sock, "SUNIONSTORE",  destination, key,                     keys...)
+srandmember(sock::IO,   key::String)                                                                            =  send(sock, "SRANDMEMBER",  key)
+srandmember(sock::IO,   key::String,                 count::Int64)                                              =  send(sock, "SRANDMEMBER",  key,         string(count))
+srem(sock::IO,          key::String,                 members::String...)                                        =  send(sock, "SREM",         key,         members...)
+#sscan(sock::IO,        key::String,                 cursor::Int64;        matching::Regex="",  count::Int64=-1) =  send(sock, "SSCAN",        key,         cursor,      matching,  count)
+sunion(sock::IO,        key::String,                 members::Any...)                                           =  send(sock, "SUNION",       key,         members...)
+sunionstore(sock::IO,   destination::String,         key::String,          keys::String...)                     =  send(sock, "SUNIONSTORE",  destination, key,                     keys...)
 #!end sets
 
 #!hyperloglogs
@@ -394,8 +403,8 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 #cluster slots
 
 #!server group
-bgrewriteaof(sock::IO)                                                                                     =  send(sock, "BGREWRITEAOF")
-bgsave(sock::IO)                                                                                           =  save(sock,                 background=true)
+bgrewriteaof(sock::IO)                    =  send(sock, "BGREWRITEAOF")
+bgsave(sock::IO)                          =  save(sock,                 background=true)
 #client getname
 #client kill
 #client list
@@ -409,20 +418,20 @@ bgsave(sock::IO)                                                                
 #config resetstat
 #config rewrite
 #config set
-dbsize(sock::IO)                                                                                           =  send(sock, "DBSIZE")
+dbsize(sock::IO)                          =  send(sock, "DBSIZE")
 #debug object
 #debug segfault
-flushall(sock::IO)                                                                                         =  send(sock, "FLUSHALL")
-flushdb(sock::IO)                                                                                          =  send(sock, "FLUSHDB")
-info(sock::IO)                                                                                             =  send(sock, "INFO")
-lastsave(sock::IO)                                                                                         =  send(sock, "LASTSAVE")
+flushall(sock::IO)                        =  send(sock, "FLUSHALL")
+flushdb(sock::IO)                         =  send(sock, "FLUSHDB")
+info(sock::IO)                            =  send(sock, "INFO")
+lastsave(sock::IO)                        =  send(sock, "LASTSAVE")
 #monitor
 #role
-save(sock::IO;          background=false)                                                                  =  send(sock, background ? "BGSAVE" : "SAVE")
+save(sock::IO;          background=false) =  send(sock, background ? "BGSAVE" : "SAVE")
 #shutdown
 #slaveof
 #slowlog
 #sync
-time(sock::IO)                                                                                             =  send(sock, "TIME")
+time(sock::IO)                            =  send(sock, "TIME")
 
 end # module
