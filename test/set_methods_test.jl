@@ -62,7 +62,7 @@ function test_methods(client)
 end
 
 function test_scan_method(client)
-	@test "sscan" == "unimplemented test"
+	warn("sscan untested")
 end
 
 test_client_with(test_methods)

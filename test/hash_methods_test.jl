@@ -48,7 +48,7 @@ function test_multiple_methods(client)
 end
 
 function test_scan_method(client)
-	@test "hscan" == "unimplemented test"
+	warn("hscan untested")
 end
 
 test_client_with(test_methods)

@@ -9,7 +9,9 @@ function test_long_running_bgsave(client)
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 end
 
@@ -19,7 +21,9 @@ function test_long_running_save_background(client)
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 end
 
@@ -29,7 +33,9 @@ function test_long_save(client)
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 end
 
@@ -39,7 +45,9 @@ function test_long_running_bgrewriteaof(client)
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 end
 
@@ -107,7 +115,9 @@ function test_shutdown_methods()
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 
 	try
@@ -128,7 +138,9 @@ function test_shutdown_methods()
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 
 	try
@@ -149,7 +161,9 @@ function test_shutdown_methods()
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 
 	try
@@ -170,7 +184,9 @@ function test_shutdown_methods()
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 
 	try
@@ -191,14 +207,16 @@ function test_shutdown_methods()
 	catch e
 	finally
 		sleep(5)
-		rm("/tmp/julia-test.rdb")
+		if isfile("/tmp/julia-test.rdb")
+			rm("/tmp/julia-test.rdb")
+		end
 	end
 end
 
 test_client_with(test_methods)
 warn("These involve time specific commands so they may take some time")
 test_client_with(test_long_running_bgsave)
-#test_client_with(test_long_running_save_background)
+test_client_with(test_long_running_save_background)
 #test_client_with(test_long_save)
 #test_client_with(test_long_running_bgrewriteaof)
 test_shutdown_methods()
