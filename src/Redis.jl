@@ -1,24 +1,23 @@
 module Redis
 
-import Base.TcpSocket
+import Base: TcpSocket, IpAddr
 export client
 
 CRLFc = ['\r', '\n']
 CRLF = join(CRLFc)
 EXPECTATIONS = {
-	Array => Set(["hkeys", "keys", "mget"]),
+	Array => Set([ "hkeys", "hvals", "hmget", "keys", "mget" ]),
 	Bool => Set([
-		"hexists",
-		"exists",
-		"expire",
-		"sismember",
-		"hset",
 		"del",
+		"expire",
+		"hset",
+		"move",
 		"msetnx",
-		"persist"
+		"persist",
+		"sismember"
 	]),
 	Dict => Set(["hgetall"]),
-	Float64 => Set(["incrbyfloat"]),
+	Float64 => Set(["incrbyfloat", "hincrbyfloat"]),
 	Int => Set([
 		"append",
 		"bitcount",
@@ -26,8 +25,12 @@ EXPECTATIONS = {
 		"dbsize",
 		"decr",
 		"decrby",
+		"exists",
 		"getbit",
-		"hklen",
+		"hexists",
+		"hlen",
+		"hstrlen",
+		"hincrby",
 		"incr",
 		"incrby",
 		"llen",
@@ -52,15 +55,22 @@ EXPECTATIONS = {
 		"bgrewriteaof",
 		"bgsave",
 		"del",
+		"echo",
 		"flushall",
 		"flushdb",
 		"get",
 		"getrange",
 		"getset",
+		"hget",
+		"hmset",
 		"info", 
 		"mset",
 		"ping",
+		"quit",
+		"rename",
+		"renamenx",
 		"save",
+		"select",
 		"set",
 		"spop",
 		"type"
@@ -107,8 +117,8 @@ function decode_response(sock::IO, cmd_called, sub_parse=false)
 	elseif resp[1] == '-'
 		error(resp[2:end])
 	elseif resp[1] == '$'
-#		@printf "sub_parse '%s', in EXPECTATIONS '%s'\n" sub_parse ( lowercase(cmd_called) in EXPECTATIONS[Array] || lowercase(cmd_called) in EXPECTATIONS[Set] )
-		if lowercase(cmd_called) in EXPECTATIONS[String] || lowercase(cmd_called) in EXPECTATIONS[Set] || ( sub_parse && ( lowercase(cmd_called) in EXPECTATIONS[Array] ) )
+#		@printf "sub_parse '%s', in EXPECTATIONS '%s'\n" sub_parse ( lowercase(cmd_called) in EXPECTATIONS[Array] || lowercase(cmd_called) in EXPECTATIONS[Set] || lowercase(cmd_called) in EXPECTATIONS[Dict] )
+		if lowercase(cmd_called) in EXPECTATIONS[String] || lowercase(cmd_called) in EXPECTATIONS[Set] || ( sub_parse && ( lowercase(cmd_called) in EXPECTATIONS[Array] || lowercase(cmd_called) in EXPECTATIONS[Dict] ) )
 			len = parseint(resp[2:end])
 			if len == -1
 				return ""
@@ -157,9 +167,22 @@ function decode_response(sock::IO, cmd_called, sub_parse=false)
 	end
 end
 
-function client(;socket::String="", host=ip"127.0.0.1", port=6379, password=None, db=0)
-	c = connect(host, port)
-	password == None || auth(c, password)
+immutable Connection
+	socket_file::String
+	host::IpAddr
+	port::Int64
+	password::String
+	database::Int64
+
+	socket::TcpSocket
+
+	Connection() = new("", ip"127.0.0.1", 6379, "", 0)
+end
+
+function client(;socket::String="", host::IpAddr=ip"127.0.0.1", port::Int64=6379, password::String="", db::Int64=0)
+	c = socket == "" ? connect(host, port) : connect(socket)
+	password == "" || auth(c, password)
+	db == 0 || select!(c, db)
 	return c
 end
 
@@ -173,28 +196,43 @@ send(sock::TcpSocket,          redis_cmd::String, args...) = ( write(sock, redis
 
 #!connection group
 auth(sock::IO,          password::String)                                                                  =  send(sock, "AUTH",         password)
-#echo
+echo(sock::IO,          message::String)                                                                   =  send(sock, "ECHO",         message)
 ping(sock::IO)                                                                                             =  send(sock, "PING")             
-#quit
-#select
+#quit(sock::IO)                                                                                             =  ( r = send(sock, "QUIT"); isopen(sock) ? (close(sock); r) : r )
+function quit(sock::IO)
+	r = send(sock, "QUIT");
+	if isopen(sock) 
+		close(sock)
+	end
+	r
+end
+# consider adding a select method which can run one specific command on the specified database
+select!(sock::IO,       index::Int64)                                                                      =  send(sock, "SELECT",       string(index))
 
 #!generic group
 del(sock::IO,           keys::String...)                                                                   =  send(sock, "DEL",          keys...)
 #dump
-exists(sock::IO,        key::String)                                                                       =  send(sock, "EXISTS",       key)
+#exists(sock::IO,        keys::String...)                                                                   =  send(sock, "EXISTS",       keys...)
+function exists(client::IO,        keys::String...)
+#	if client.redis_version == 3.0 && client.redis_subversion >= 3
+#		send(client, "EXISTS",       keys)
+#	else
+		sum([send(client, "EXISTS",  key) for key in keys])
+#	end
+end
 expire(sock::IO,        key::String,                  by::Int64)                                           =  send(sock, "EXPIRE",       key,                string(by))
 #expireat
 keys(sock::IO,          matching::String="*")                                                              =  send(sock, "KEYS",         matching)
 #migrate
-#move
+move(sock::IO,          key::String,                  index::Int64)                                        =  send(sock, "MOVE",         key,                string(index))
 #object
 persist(sock::IO,       key::String)                                                                       =  send(sock, "PERSIST",      key)
 #pexpire
 #pexpireat
 pttl(sock::IO,          key::String)                                                                       =  send(sock, "PTTL",         key)
 #randomkey
-#rename
-#renamenx
+rename(sock::IO,        key::String,                  newkey::String;     not_exists=false)                =  send(sock, "RENAME",       key,                 newkey)
+renamenx(sock::IO,      key::String,                  newkey::String)                                      =  rename(sock, key,          newkey,              not_exists=true)
 #restore
 #scan
 #sort
@@ -277,21 +315,41 @@ strlen(sock::IO,  key::String)                                     = send(sock, 
 #!end string group
                                                                                                            
 #!hash group
-#hdel
-hexists(sock::IO,       key::String,                 hkey::Any)    =  send(sock, "HEXISTS",      key,         hkey)
-#hget
-#hgetall
-#hincrby
-#hincrbyfloat
-#hkeys
-#hlen
-#hmget
-#hmset
+hdel(sock::IO,         key::String,  hkeys::String...)                                           = send(sock,         "HDEL",         key,   hkeys...)
+hexists(sock::IO,      key::String,  field::Any)                                                 = send(sock,         "HEXISTS",      key,   field)
+hget(sock::IO,         key::String,  field::String)                                              = send(sock,         "HGET",         key,   field)
+hget(sock::IO,         key::String,  fields::Array)                                              = hmget(sock,        key,            fields)
+hgetall(sock::IO,      key::String)                                                              = send(sock,         "HGETALL",      key)
+
+hdecr(sock::IO,        key::String,  field::String)                                              = hincrby(sock,      key,            field, -1)
+hdecrby(sock::IO,      key::String,  field::String,     by::Int64)                               = send(sock,         "HINCRBY",      key,   field,        string(-1by))
+hdecrby(sock::IO,      key::String,  field::String,     by::Float64)                             = hincrbyfloat(sock, key,            field, -1by)
+hdecrbyfloat(sock::IO, key::String,  field::String,     by::Real)                                = send(sock,         "HINCRBYFLOAT", key,   field,        string(-1by))
+hincr(sock::IO,        key::String,  field::String)                                              = hincrby(sock,      key,            field, 1)
+hincrby(sock::IO,      key::String,  field::String,     by::Int64)                               = send(sock,         "HINCRBY",      key,   field,        string(by))
+hincrby(sock::IO,      key::String,  field::String,     by::Float64)                             = hincrbyfloat(sock, key,            field, by)
+hincrbyfloat(sock::IO, key::String,  field::String,     by::Real)                                = send(sock,         "HINCRBYFLOAT", key,   field,        string(by))
+
+hkeys(sock::IO,        key::String;  sorted=false)                                               = ( r = send(sock,   "HKEYS",        key);  sorted ?      sort(r) : r )
+hlen(sock::IO,         key::String)                                                              = send(sock,         "HLEN",         key)
+hmget(sock::IO,        key::String,  fields::Array{ASCIIString})                                 = send(sock,         "HMGET",        key,                 fields...)
+hmget(sock::IO,        key::String,  fields::Any...)                                             = hmget(sock,        key,            collect(map(string,  fields)))
+hmset(sock::IO,        key::String,  field_vals::Array{ASCIIString})                             = send(sock,         "HMSET",        key,                 field_vals...)
+hmset(sock::IO,        key::String,  field_vals::Array)                                          = hmset(sock,        key,            collect(map(string,  field_vals)))
+hmset(sock::IO,        key::String,  field_vals::Any...)                                         = hmset(sock,        key,            collect(map(string,  field_vals)))
 #hscan
-#hset
-#hsetnx
-#hstrlen
-#hvals
+hset(sock::IO,         key::String,  field::String,     value::String;  not_exists::Bool=false)  = send(sock,         not_exists ? "HSETNX" : "HSET",       key,   field,    value)
+hset(sock::IO,         key::String,  field::String,     value::Any;     not_exists::Bool=false)  = hset(sock,         key,            field, string(value), not_exists=not_exists)
+hsetnx(sock::IO,       key::String,  field::String,     value::String)                           = hset(sock,         key,            field, value,         not_exists=true)
+#hstrlen(sock::IO,  key::String,  field::String)                                                  = send(sock,        "HSTRLEN",  key,   field)
+function hstrlen(sock::IO,  key::String,  field::String)
+#	if client.redis_version >= 3.2 && redis_subversion >= 0
+#		send(sock,        "HSTRLEN",  key,   field)
+#	else
+		length(hget(sock, key, field))
+#	end
+end
+hvals(sock::IO,        key::String; sorted=true)                                                 = ( r = send(sock,  "HVALS",    key);  sorted ? sort(r) : r )
 #!end hashes
                                                                                                            
 #!sets
@@ -404,7 +462,7 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 
 #!server group
 bgrewriteaof(sock::IO)                    =  send(sock, "BGREWRITEAOF")
-bgsave(sock::IO)                          =  save(sock,                 background=true)
+bgsave(sock::IO)                          =  save(sock, background=true)
 #client getname
 #client kill
 #client list
@@ -419,16 +477,47 @@ bgsave(sock::IO)                          =  save(sock,                 backgrou
 #config rewrite
 #config set
 dbsize(sock::IO)                          =  send(sock, "DBSIZE")
+#function dbsize(sock::IO, index::Int64) 
+#	cdb = current(sock)
+#	select!(sock, index)
+#	r = send(sock, "DBSIZE")
+#	select!(sock, cdb)
+#	r
+#end
 #debug object
 #debug segfault
 flushall(sock::IO)                        =  send(sock, "FLUSHALL")
 flushdb(sock::IO)                         =  send(sock, "FLUSHDB")
-info(sock::IO)                            =  send(sock, "INFO")
+function info(sock::IO, section::String="default")
+	if lowercase(section) == "default"
+		send(sock, "INFO")
+	elseif lowercase(section) in [ "all", "clients", "cluster", "commandstats", "cpu", "keyspace", "memory", "persistence", "replication", "server", "stats" ]
+		send(sock, "INFO", section)
+	else
+		error("Invalid section '$section'")
+	end
+end
+#info(sock::IO, section::String="default") =  send(sock, "INFO", section)
 lastsave(sock::IO)                        =  send(sock, "LASTSAVE")
 #monitor
 #role
 save(sock::IO;          background=false) =  send(sock, background ? "BGSAVE" : "SAVE")
-#shutdown
+function shutdown(sock::IO, save::Bool)
+	if save
+		send(sock, "SHUTDOWN", "SAVE")
+	else
+		send(sock, "SHUTDOWN", "NOSAVE")
+	end
+end
+function shutdown(sock::IO, dosave::String=""; save::Bool=true)
+	if lowercase(dosave) == "save" || save
+		send(sock, "SHUTDOWN", true)
+	elseif lowercase(dosave) == "nosave" || save == false
+		send(sock, "SHUTDOWN", false)
+	else
+		send(sock, "SHUTDOWN")
+	end
+end
 #slaveof
 #slowlog
 #sync

@@ -34,27 +34,27 @@ klient = IOBuffer(":1\r\n")
 @test readall(klient) == ""
 
 klient = IOBuffer(":1\r\n")
-@test Redis.decode_response(klient, "exists") == true
+@test Redis.decode_response(klient, "exists") == 1
 @test readall(klient) == ""
 
 klient = IOBuffer(":0\r\n")
-@test Redis.decode_response(klient, "exists") == false
+@test Redis.decode_response(klient, "exists") == 0
 @test readall(klient) == ""
 
 klient = IOBuffer(":1\r\n")
-@test Redis.decode_response(klient, "EXISTS") == true
+@test Redis.decode_response(klient, "EXISTS") == 1
 @test readall(klient) == ""
 
 klient = IOBuffer(":0\r\n")
-@test Redis.decode_response(klient, "EXISTS") == false
+@test Redis.decode_response(klient, "EXISTS") == 0
 @test readall(klient) == ""
 
 klient = IOBuffer(":6\r\n")
-@test Redis.decode_response(klient, "exists") == true
+@test Redis.decode_response(klient, "exists") == 6
 @test readall(klient) == ""
 
 klient = IOBuffer(":6\r\n")
-@test Redis.decode_response(klient, "EXISTS") == true
+@test Redis.decode_response(klient, "EXISTS") == 6
 @test readall(klient) == ""
 
 #test number decoding
