@@ -59,7 +59,11 @@ function test_methods(client)
 	@test Redis.sunionstore(client, "DESTSET", "CSET") == 2
 	@test Redis.sunionstore(client, "DESTSET", "ASET", "CSET", "BSET") == 7
 
+end
+
+function test_scan_method(client)
 	@test "sscan" == "unimplemented test"
 end
 
 test_client_with(test_methods)
+test_client_with(test_scan_method)
