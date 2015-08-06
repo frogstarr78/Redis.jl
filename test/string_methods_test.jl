@@ -13,28 +13,17 @@ end
 function test_incr_methods(client)
 	@test Redis.incr(client, "KEY") == 1
 	@test Redis.incrby(client, "KEY", 4) == 5
-	r = Redis.incrby(client, "KEY", 4.1)
-	@test string(r) == "9.1"
-	r = Redis.incrbyfloat(client, "KEY", 3.2)
-	@test_approx_eq r 12.3
-	@test string(r) == "12.3"
-	close(client)
+	@test_approx_eq Redis.incrby(client, "KEY", 4.1) 9.1
+	@test_approx_eq Redis.incrbyfloat(client, "KEY", 3.2) 12.3
 end
 
 function test_decr_methods(client)
-	r = Redis.set(client, "KEY", 12)
-	@test r == "OK"
-	r = Redis.decr(client, "KEY") 
-	@test r == 11
-	r = Redis.decrby(client, "KEY", 4)
-	@test r == 7
-	warn("Currently, server doesn't implement decrbyfloat.")
-#	r = Redis.decrby(client, "KEY", 4.1)
-#	@test string(r) == "3.2"
-#	r = Redis.decrbyfloat(client, "KEY", 3.2)
-#	@printf "r '%s'" r
-#	@test string(r) == "0"
-	close(client)
+	@test Redis.set(client, "KEY", 12) == "OK"
+	@test Redis.decr(client, "KEY") == 11
+	@test Redis.decrby(client, "KEY", 4) == 7
+
+	@test_approx_eq Redis.decrby(client, "KEY", 4.1) 2.9
+	@test Redis.decrbyfloat(client, "KEY", 2.9) == 0
 end
 
 function test_mset_methods(client)
