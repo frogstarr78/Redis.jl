@@ -6,7 +6,7 @@ export client
 CRLFc = ['\r', '\n']
 CRLF = join(CRLFc)
 EXPECTATIONS = {
-	Array => Set([ "hkeys", "hvals", "hmget", "keys", "mget" ]),
+	Array => Set([ "hkeys", "hvals", "hmget", "keys", "lrange", "mget" ]),
 	Bool => Set([
 		"del",
 		"expire",
@@ -29,12 +29,18 @@ EXPECTATIONS = {
 		"getbit",
 		"hexists",
 		"hlen",
-		"hstrlen",
 		"hincrby",
+		"hstrlen",
 		"incr",
 		"incrby",
+		"linsert",
 		"llen",
+		"lpush",
+		"lpushx",
+		"lrem",
 		"pttl",
+		"rpush",
+		"rpushx",
 		"scard",
 		"sadd",
 		"setbit",
@@ -64,11 +70,17 @@ EXPECTATIONS = {
 		"hget",
 		"hmset",
 		"info", 
+		"lindex",
+		"lpop",
+		"lset",
+		"ltrim",
 		"mset",
 		"ping",
 		"quit",
 		"rename",
 		"renamenx",
+		"rpop",
+		"rpoplpush",
 		"save",
 		"select",
 		"set",
@@ -187,6 +199,17 @@ function client(;socket::String="", host::IpAddr=ip"127.0.0.1", port::Int64=6379
 end
 
 send(sock::TcpSocket,          redis_cmd::String, args...) = ( write(sock, redis_type([redis_cmd, args...]));                     decode_response(sock, redis_cmd) )
+shutdown(sock::IO, save::Bool)                             = ( write(sock, redis_type(["SHUTDOWN", save ? "SAVE" : "NOSAVE"]));   readall(sock); close(sock);          "" )
+shutdown(sock::IO)                                         = ( write(sock, redis_type(["SHUTDOWN"]));                             readall(sock); close(sock);          "" )
+function shutdown(sock::IO, save::String)
+	if lowercase(save) == "save"
+		shutdown(sock, true)
+	elseif lowercase(save) == "nosave"
+		shutdown(sock, false)
+	else
+		shutdown(sock)
+	end
+end
 #client_send(sock::TcpSocket,  redis_cmd::String, args...) = ( write(sock, redis_type([string("CLIENT ",  redis_cmd), args...])); decode_response(sock, redis_cmd) )
 #cluster_send(sock::TcpSocket, redis_cmd::String, args...) = ( write(sock, redis_type([string("CLUSTER ", redis_cmd), args...])); decode_response(sock, redis_cmd) )
 #command_send(sock::TcpSocket, redis_cmd::String, args...) = ( write(sock, redis_type([string("COMMAND ", redis_cmd), args...])); decode_response(sock, redis_cmd) )
@@ -214,7 +237,7 @@ del(sock::IO,           keys::String...)                                        
 #dump
 #exists(sock::IO,        keys::String...)                                                                   =  send(sock, "EXISTS",       keys...)
 function exists(client::IO,        keys::String...)
-#	if client.redis_version == 3.0 && client.redis_subversion >= 3
+#	if client.server_major_version == 3.0 && client.server_minor_version >= 3
 #		send(client, "EXISTS",       keys)
 #	else
 		sum([send(client, "EXISTS",  key) for key in keys])
@@ -343,7 +366,7 @@ hset(sock::IO,         key::String,  field::String,     value::Any;     not_exis
 hsetnx(sock::IO,       key::String,  field::String,     value::String)                           = hset(sock,         key,            field, value,         not_exists=true)
 #hstrlen(sock::IO,  key::String,  field::String)                                                  = send(sock,        "HSTRLEN",  key,   field)
 function hstrlen(sock::IO,  key::String,  field::String)
-#	if client.redis_version >= 3.2 && redis_subversion >= 0
+#	if client.server_major_version >= 3.2 && client.server_minor_version >= 0
 #		send(sock,        "HSTRLEN",  key,   field)
 #	else
 		length(hget(sock, key, field))
@@ -416,20 +439,66 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 #blpop
 #brpop
 #brpoplpush
-#lindex
-#linsert
-#llen
-#lpop
-#lpush
-#lpushx
-#lrange
-#lrem
-#lset
-#ltrim
-#rpop
-#rpoplpush
-#rpush
-#rpushx
+lindex(sock::IO, key::String, index::Int64)                                              = send(sock,  "LINDEX",    key,       string(index))
+function linsert(sock::IO, key::String, how::String, where::String, value::String)
+	if lowercase(how) in ["before", "after"]
+		send(sock, "LINSERT", key, how, where, value)
+	else
+		error("Unknown insertion method $how")
+	end
+end
+llen(sock::IO,       key::String)                                                        = send(sock,   "LLEN",      key)
+lpop(sock::IO,       key::String)                                                        = send(sock,   "LPOP",      key)
+
+function lpush(sock::IO, key::String, values::Array{ASCIIString}; if_exists::Bool=false)
+	if if_exists
+		res = send(sock, "LPUSHX", key, shift!(values))
+		res == 0 && return 0
+		length(values) == 0 && return res
+	end
+	send(sock,   "LPUSH", key, values...)
+end
+#lpush(sock::IO,      key::String,   values::Array{ASCIIString};  if_exists::Bool=false)  = send(sock,   if_exists ?  "LPUSHX" : "LPUSH",           key,                 values...)
+lpush(sock::IO,      key::String,   value::String;               if_exists::Bool=false)  = lpush(sock,  key,         [value],                      if_exists=if_exists)
+lpush(sock::IO,      key::String,   values::Array;               if_exists::Bool=false)  = lpush(sock,  key,         collect(map(string, values)), if_exists=if_exists)
+lpush(sock::IO,      key::String,   values::Any...;              if_exists::Bool=false)  = lpush(sock,  key,         collect(map(string, values)), if_exists=if_exists)
+
+lpushx(sock::IO,     key::String,   value::String)                                       = lpush(sock,  key,         value,     if_exists=true)
+
+lrange(sock::IO,     key::String,   start::Int64,                stop::Int64)            = send(sock,   "LRANGE",    key,       string(start),     string(stop))
+lrem(sock::IO,       key::String,   count::Int64,                value::String)          = send(sock,   "LREM",      key,       string(count),     value)
+lset(sock::IO,       key::String,   index::Int64,                value::String)          = send(sock,   "LSET",      key,       string(index),     value)
+ltrim(sock::IO,      key::String,   start::Int64,                stop::Int64)            = send(sock,   "LTRIM",     key,       string(start),     string(stop))
+rpop(sock::IO,       key::String)                                                        = send(sock,   "RPOP",      key)
+rpoplpush(sock::IO,  skey::String,  dkey::String)                                        = send(sock,   "RPOPLPUSH", skey,      dkey)
+
+function rpush(sock::IO, key::String, values::Array{ASCIIString}; if_exists::Bool=false)
+	if if_exists
+		res = send(sock, "RPUSHX", key, shift!(values))
+		res == 0 && return 0
+		length(values) == 0 && return res
+	end
+	send(sock,   "RPUSH", key, values...)
+end
+#rpush(sock::IO,      key::String,   values::Array{ASCIIString};  if_exists::Bool=false)  = send(sock,   if_exists ?  "RPUSHX" : "RPUSH", key,      values...)
+rpush(sock::IO,      key::String,   value::String;               if_exists::Bool=false)  = rpush(sock,  key,         [value],                      if_exists=if_exists)
+rpush(sock::IO,      key::String,   values::Array;               if_exists::Bool=false)  = rpush(sock,  key,         collect(map(string, values)), if_exists=if_exists)
+rpush(sock::IO,      key::String,   values::Any...;              if_exists::Bool=false)  = rpush(sock,  key,         collect(map(string, values)), if_exists=if_exists)
+
+rpushx(sock::IO,     key::String,   value::String)                                       = rpush(sock,  key,         value,     if_exists=true)
+
+# client only commands (w/ some help from the core method definitions)
+lpop(sock::IO,       key::String,   count::Int64)                                        = [lpop(sock,  key) for i = 1:count]
+lrange(sock::IO,     key::String)                                                        = lrange(sock, key, 0, -1)
+rpop(sock::IO,       key::String,   count::Int64)                                        = [rpop(sock,  key) for i = 1:count]
+
+lpushx(sock::IO,     key::String,   values::Array{ASCIIString})                          = lpush(sock,  key,         values,                       if_exists=true)
+lpushx(sock::IO,     key::String,   values::Array)                                       = lpush(sock,  key,         collect(map(string, values)), if_exists=true)
+lpushx(sock::IO,     key::String,   values::Any...)                                      = lpush(sock,  key,         collect(map(string, values)), if_exists=true)
+#
+rpushx(sock::IO,     key::String,   values::Array{ASCIIString})                          = rpush(sock,  key,         values,                       if_exists=true)
+rpushx(sock::IO,     key::String,   values::Array)                                       = rpush(sock,  key,         collect(map(string, values)), if_exists=true)
+rpushx(sock::IO,     key::String,   values::Any...)                                      = rpush(sock,  key,         collect(map(string, values)), if_exists=true)
 #!end lists
 
 #!scripting group
@@ -497,27 +566,10 @@ function info(sock::IO, section::String="default")
 		error("Invalid section '$section'")
 	end
 end
-#info(sock::IO, section::String="default") =  send(sock, "INFO", section)
 lastsave(sock::IO)                        =  send(sock, "LASTSAVE")
 #monitor
 #role
 save(sock::IO;          background=false) =  send(sock, background ? "BGSAVE" : "SAVE")
-function shutdown(sock::IO, save::Bool)
-	if save
-		send(sock, "SHUTDOWN", "SAVE")
-	else
-		send(sock, "SHUTDOWN", "NOSAVE")
-	end
-end
-function shutdown(sock::IO, dosave::String=""; save::Bool=true)
-	if lowercase(dosave) == "save" || save
-		send(sock, "SHUTDOWN", true)
-	elseif lowercase(dosave) == "nosave" || save == false
-		send(sock, "SHUTDOWN", false)
-	else
-		send(sock, "SHUTDOWN")
-	end
-end
 #slaveof
 #slowlog
 #sync
