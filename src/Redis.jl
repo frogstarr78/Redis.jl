@@ -248,30 +248,30 @@ typeof(sock::IO,        key::String)                                            
 #watch
 
 #!string group
-append(sock::IO,        key::String,                  val::String)                                        = send(sock, "APPEND",            key,             val)
+append(sock::IO,        key::String,                  val::String)                                        = send(sock,        "APPEND",           key,             val)
 
-bitcount(sock::IO,      key::String,                  start::Int64=0,     nd::Int64=-1)                   = send(sock, "BITCOUNT",          key,             string(start), string(nd))
-bitop(sock::IO,         op::String,                   destkey::String,    key::String...)                 = send(sock, "BITOP",             op,              destkey,       key...)
-bitpos(sock::IO,        key::String,                  bit::Int,           start::Int64=0,  nd::Int64=-1)  = send(sock, "BITPOS",            key,             string(bit),   string(start),  string(nd))
-getbit(sock::IO,        key::String,                  bit::Int)                                           = send(sock, "GETBIT",            key,             string(bit))
-setbit(sock::IO,        key::String,                  bit::Int,           value::Any)                     = send(sock, "SETBIT",            key,             string(bit),   string(value))
+bitcount(sock::IO,      key::String,                  start::Int64=0,     nd::Int64=-1)                   = send(sock,        "BITCOUNT",         key,             string(start), string(nd))
+bitop(sock::IO,         op::String,                   destkey::String,    key::String...)                 = send(sock,        "BITOP",            op,              destkey,       key...)
+bitpos(sock::IO,        key::String,                  bit::Int,           start::Int64=0,  nd::Int64=-1)  = send(sock,        "BITPOS",           key,             string(bit),   string(start),  string(nd))
+getbit(sock::IO,        key::String,                  bit::Int)                                           = send(sock,        "GETBIT",           key,             string(bit))
+setbit(sock::IO,        key::String,                  bit::Int,           value::Any)                     = send(sock,        "SETBIT",           key,             string(bit),   string(value))
 
-decr(sock::IO,          key::String)                                                                      = send(sock, "DECR",              key)
-decrby(sock::IO,        key::String,                  by::Int64)                                          = send(sock, "DECRBY",            key,             string(by))
-#decrby(sock::IO,       key::String,                  by::Float64)                                        = send(sock, "DECRBYFLOAT",       key,             string(by))
-#decrbyfloat(sock::IO,  key::String,                  by::Float64)                                        = send(sock, "DECRBYFLOAT",       key,             string(by))
-incr(sock::IO,          key::String)                                                                      = send(sock, "INCR",              key)
-incrby(sock::IO,        key::String,                  by::Float64)                                        = send(sock, "INCRBYFLOAT",       key,             string(by))
-incrby(sock::IO,        key::String,                  by::Int64)                                          = send(sock, "INCRBY",            key,             string(by))
-incrbyfloat(sock::IO,   key::String,                  by::Real)                                           = send(sock, "INCRBYFLOAT",       key,             string(by))
+decr(sock::IO,          key::String)                                                                      = send(sock,        "DECR",             key)
+decrby(sock::IO,        key::String,                  by::Int64)                                          = send(sock,        "DECRBY",           key,             string(by))
+decrby(sock::IO,        key::String,                  by::Float64)                                        = incrbyfloat(sock, key,                -1by)
+decrbyfloat(sock::IO,   key::String,                  by::Float64)                                        = incrbyfloat(sock, key,                -1by)
+incr(sock::IO,          key::String)                                                                      = send(sock,        "INCR",             key)
+incrby(sock::IO,        key::String,                  by::Float64)                                        = send(sock,        "INCRBYFLOAT",      key,             string(by))
+incrby(sock::IO,        key::String,                  by::Int64)                                          = send(sock,        "INCRBY",           key,             string(by))
+incrbyfloat(sock::IO,   key::String,                  by::Real)                                           = send(sock,        "INCRBYFLOAT",      key,             string(by))
 
-getrange(sock::IO,      key::String,                  start::Int64,       nd::Int64)                      = send(sock, "GETRANGE",          key,             string(start), string(nd))
-setrange(sock::IO,      key::String,                  start::Int64,       value::Any)                     = send(sock, "SETRANGE",          key,             string(start),        string(value))
-getset(sock::IO,        key::String,                  val::String)                                        = send(sock, "GETSET",            key,             val)
+getrange(sock::IO,      key::String,                  start::Int64,       nd::Int64)                      = send(sock,        "GETRANGE",         key,             string(start), string(nd))
+setrange(sock::IO,      key::String,                  start::Int64,       value::Any)                     = send(sock,        "SETRANGE",         key,             string(start),        string(value))
+getset(sock::IO,        key::String,                  val::String)                                        = send(sock,        "GETSET",           key,             val)
 
-get(sock::IO,           key::String)                                                                      = send(sock, "GET",               key)
-get(sock::IO,           key::Char)                                                                        = get(sock,  string(key))
-get(sock::IO,           key::Int64)                                                                       = get(sock,  string(key))
+get(sock::IO,           key::String)                                                                      = send(sock,        "GET",              key)
+get(sock::IO,           key::Char)                                                                        = get(sock,         string(key))
+get(sock::IO,           key::Int64)                                                                       = get(sock,         string(key))
 
 
 mget(sock::IO,          keys::Array{ASCIIString};     sorted=false)                                       = ( r =      send(sock, "MGET",   keys...);        sorted ? sort(r) : r )
@@ -523,4 +523,11 @@ end
 #sync
 time(sock::IO)                            =  send(sock, "TIME")
 
+#! geo group
+#geoadd
+#geodist
+#geohash
+#geopos
+#georadius
+#georadiusbymember
 end # module
