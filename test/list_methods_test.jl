@@ -119,6 +119,7 @@ function test_client_only_methods(client)
 end
 
 function test_atomic_methods(client)
+	warn("Haven't tested atomic methods yet")
 end
 
 test_clean_client_with(test_methods)
