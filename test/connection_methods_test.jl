@@ -93,7 +93,7 @@ function test_rename_commands(client)
 end
 
 test_auth_methods()
-test_client_with(test_methods)
-test_client_with(test_database_select)
-test_client_with(test_rename_commands)
+test_clean_client_with(test_methods)
+test_clean_client_with(test_database_select)
+test_clean_client_with(test_rename_commands)
 test_select_on_connect()

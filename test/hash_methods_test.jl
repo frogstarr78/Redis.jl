@@ -51,6 +51,6 @@ function test_scan_method(client)
 	warn("hscan untested")
 end
 
-test_client_with(test_methods)
-test_client_with(test_multiple_methods)
-test_client_with(test_scan_method)
+test_clean_client_with(test_methods)
+test_clean_client_with(test_multiple_methods)
+test_clean_client_with(test_scan_method)

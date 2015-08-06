@@ -97,8 +97,8 @@ function test_scan_method(client)
 	warn("Scan untested")
 end
 
-test_client_with(test_append_methods)
-test_client_with(test_incr_methods)
-test_client_with(test_decr_methods)
-test_client_with(test_mset_methods)
-test_client_with(test_string_methods)
+test_clean_client_with(test_append_methods)
+test_clean_client_with(test_incr_methods)
+test_clean_client_with(test_decr_methods)
+test_clean_client_with(test_mset_methods)
+test_clean_client_with(test_string_methods)

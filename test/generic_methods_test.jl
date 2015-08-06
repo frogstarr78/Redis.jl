@@ -48,5 +48,6 @@ function test_type_methods(client)
 	warn("Need to make additional tests for typeof method")
 end
 
-test_client_with(test_methods)
-test_client_with(test_type_methods)
+test_clean_client_with(test_methods)
+test_clean_client_with(test_expire_methods)
+test_clean_client_with(test_type_methods)
