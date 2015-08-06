@@ -4,51 +4,19 @@ using Base.Test
 include("test_client.jl")
 
 function test_long_running_bgsave(client)
-	try
-		@test Redis.bgsave(client) == "Background saving started"
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
-		end
-	end
+	@test Redis.bgsave(client) == "Background saving started"
 end
 
 function test_long_running_save_background(client)
-	try
-		@test Redis.save(client, background=true) == "Background saving started"
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
-		end
-	end
+	@test Redis.save(client, background=true) == "Background saving started"
 end
 
 function test_long_save(client)
-	try
-		@test Redis.save(client, background=false) == "Ok"
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
-		end
-	end
+	@test Redis.save(client, background=false) == "OK"
 end
 
 function test_long_running_bgrewriteaof(client)
-	try
-		@test Redis.bgrewriteaof(client) == "Background append only file rewriting started"
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
-		end
-	end
+	@test Redis.bgrewriteaof(client) == "Background append only file rewriting started"
 end
 
 function test_methods(client)
@@ -97,126 +65,86 @@ function test_methods(client)
 end
 
 function test_shutdown_methods()
-	try
-		test_client_with() do client
-			Redis.flushall(client)
-			Redis.set(client, "KEY", "VAL")
-			Redis.set(client, "KEY2", "VAL2")
-			Redis.set(client, "KEY3", "VAL3")
-			Redis.set(client, "KEY4", "VAL4")
+	test_client_with() do client
+		Redis.flushall(client)
+		Redis.set(client, "KEY", "VAL")
+		Redis.set(client, "KEY2", "VAL2")
+		Redis.set(client, "KEY3", "VAL3")
+		Redis.set(client, "KEY4", "VAL4")
 
-			Redis.shutdown(client)
-			open(`netstat -lntp`) do procss
-				r = readall(procss)
-				@test contains(r, "9999") == false
-			end
-		end
-		test_client_with(c -> @test Redis.dbsize(c) == 4)
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
+		Redis.shutdown(client)
+		open(`netstat -lntp`) do procss
+			r = readall(procss)
+			@test contains(r, "9999") == false
 		end
 	end
+	test_client_with(c -> @test Redis.dbsize(c) == 4)
 
-	try
-		test_client_with() do client
-			Redis.flushall(client)
-			Redis.set(client, "KEY", "VAL")
-			Redis.set(client, "KEY2", "VAL2")
-			Redis.set(client, "KEY3", "VAL3")
-			Redis.set(client, "KEY4", "VAL4")
+	test_client_with() do client
+		Redis.flushall(client)
+		Redis.set(client, "KEY", "VAL")
+		Redis.set(client, "KEY2", "VAL2")
+		Redis.set(client, "KEY3", "VAL3")
+		Redis.set(client, "KEY4", "VAL4")
 
-			Redis.shutdown(client, "save")
-			open(`netstat -lntp`) do procss
-				r = readall(procss)
-				@test contains(r, "9999") == false
-			end
-		end
-		test_client_with(c -> @test Redis.dbsize(c) == 4)
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
+		Redis.shutdown(client, "save")
+		open(`netstat -lntp`) do procss
+			r = readall(procss)
+			@test contains(r, "9999") == false
 		end
 	end
+	test_client_with(c -> @test Redis.dbsize(c) == 4)
 
-	try
-		test_client_with() do client
-			Redis.flushall(client)
-			Redis.set(client, "KEY", "VAL")
-			Redis.set(client, "KEY2", "VAL2")
-			Redis.set(client, "KEY3", "VAL3")
-			Redis.set(client, "KEY4", "VAL4")
+	test_client_with() do client
+		Redis.flushall(client)
+		Redis.set(client, "KEY", "VAL")
+		Redis.set(client, "KEY2", "VAL2")
+		Redis.set(client, "KEY3", "VAL3")
+		Redis.set(client, "KEY4", "VAL4")
 
-			Redis.shutdown(client, "nosave")
-			open(`netstat -lntp`) do procss
-				r = readall(procss)
-				@test contains(r, "9999") == false
-			end
-		end
-		test_client_with(c -> @test Redis.dbsize(c) == 0)
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
+		Redis.shutdown(client, "nosave")
+		open(`netstat -lntp`) do procss
+			r = readall(procss)
+			@test contains(r, "9999") == false
 		end
 	end
+	test_client_with(c -> @test Redis.dbsize(c) == 0)
 
-	try
-		test_client_with() do client
-			Redis.flushall(client)
-			Redis.set(client, "KEY", "VAL")
-			Redis.set(client, "KEY2", "VAL2")
-			Redis.set(client, "KEY3", "VAL3")
-			Redis.set(client, "KEY4", "VAL4")
+	test_client_with() do client
+		Redis.flushall(client)
+		Redis.set(client, "KEY", "VAL")
+		Redis.set(client, "KEY2", "VAL2")
+		Redis.set(client, "KEY3", "VAL3")
+		Redis.set(client, "KEY4", "VAL4")
 
-			Redis.shutdown(client, true)
-			open(`netstat -lntp`) do procss
-				r = readall(procss)
-				@test contains(r, "9999") == false
-			end
-		end
-		test_client_with(c -> @test Redis.dbsize(c) == 4)
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
+		Redis.shutdown(client, true)
+		open(`netstat -lntp`) do procss
+			r = readall(procss)
+			@test contains(r, "9999") == false
 		end
 	end
+	test_client_with(c -> @test Redis.dbsize(c) == 4)
 
-	try
-		test_client_with() do client
-			Redis.flushall(client)
-			Redis.set(client, "KEY", "VAL")
-			Redis.set(client, "KEY2", "VAL2")
-			Redis.set(client, "KEY3", "VAL3")
-			Redis.set(client, "KEY4", "VAL4")
+	test_client_with() do client
+		Redis.flushall(client)
+		Redis.set(client, "KEY", "VAL")
+		Redis.set(client, "KEY2", "VAL2")
+		Redis.set(client, "KEY3", "VAL3")
+		Redis.set(client, "KEY4", "VAL4")
 
-			Redis.shutdown(client, false)
-			open(`netstat -lntp`) do procss
-				r = readall(procss)
-				@test contains(r, "9999") == false
-			end
-		end
-		test_client_with(c -> @test Redis.dbsize(c) == 0)
-	catch e
-	finally
-		sleep(5)
-		if isfile("/tmp/julia-test.rdb")
-			rm("/tmp/julia-test.rdb")
+		Redis.shutdown(client, false)
+		open(`netstat -lntp`) do procss
+			r = readall(procss)
+			@test contains(r, "9999") == false
 		end
 	end
+	test_client_with(c -> @test Redis.dbsize(c) == 0)
 end
 
 test_client_with(test_methods)
 warn("These involve time specific commands so they may take some time")
 test_client_with(test_long_running_bgsave)
 test_client_with(test_long_running_save_background)
-#test_client_with(test_long_save)
-#test_client_with(test_long_running_bgrewriteaof)
-test_shutdown_methods()
+test_client_with(test_long_save)
+test_client_with(test_long_running_bgrewriteaof)
+#test_shutdown_methods()
