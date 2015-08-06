@@ -65,37 +65,38 @@ function test_methods(client)
 end
 
 function test_shutdown_methods()
-	test_client_with() do client
-		Redis.flushall(client)
+	test_shutdown_client() do client
 		Redis.set(client, "KEY", "VAL")
 		Redis.set(client, "KEY2", "VAL2")
 		Redis.set(client, "KEY3", "VAL3")
 		Redis.set(client, "KEY4", "VAL4")
+		@test Redis.dbsize(client) == 4
 
 		Redis.shutdown(client)
-		open(`netstat -lntp`) do procss
+		@test isopen(client) == false
+		open(`netstat -lnt`) do procss
 			r = readall(procss)
 			@test contains(r, "9999") == false
 		end
 	end
-	test_client_with(c -> @test Redis.dbsize(c) == 4)
+	test_dirty_client_with(c -> @test Redis.dbsize(c) == 0)
 
-	test_client_with() do client
-		Redis.flushall(client)
+	test_shutdown_client() do client
 		Redis.set(client, "KEY", "VAL")
 		Redis.set(client, "KEY2", "VAL2")
 		Redis.set(client, "KEY3", "VAL3")
 		Redis.set(client, "KEY4", "VAL4")
+		@test Redis.dbsize(client) == 4
 
 		Redis.shutdown(client, "save")
-		open(`netstat -lntp`) do procss
+		open(`netstat -lnt`) do procss
 			r = readall(procss)
 			@test contains(r, "9999") == false
 		end
 	end
-	test_client_with(c -> @test Redis.dbsize(c) == 4)
+	test_dirty_client_with(c -> @test Redis.dbsize(c) == 4)
 
-	test_client_with() do client
+	test_shutdown_client() do client
 		Redis.flushall(client)
 		Redis.set(client, "KEY", "VAL")
 		Redis.set(client, "KEY2", "VAL2")
@@ -103,14 +104,14 @@ function test_shutdown_methods()
 		Redis.set(client, "KEY4", "VAL4")
 
 		Redis.shutdown(client, "nosave")
-		open(`netstat -lntp`) do procss
+		open(`netstat -lnt`) do procss
 			r = readall(procss)
 			@test contains(r, "9999") == false
 		end
 	end
-	test_client_with(c -> @test Redis.dbsize(c) == 0)
+	test_dirty_client_with(c -> @test Redis.dbsize(c) == 0)
 
-	test_client_with() do client
+	test_shutdown_client() do client
 		Redis.flushall(client)
 		Redis.set(client, "KEY", "VAL")
 		Redis.set(client, "KEY2", "VAL2")
@@ -118,14 +119,14 @@ function test_shutdown_methods()
 		Redis.set(client, "KEY4", "VAL4")
 
 		Redis.shutdown(client, true)
-		open(`netstat -lntp`) do procss
+		open(`netstat -lnt`) do procss
 			r = readall(procss)
 			@test contains(r, "9999") == false
 		end
 	end
-	test_client_with(c -> @test Redis.dbsize(c) == 4)
+	test_dirty_client_with(c -> @test Redis.dbsize(c) == 4)
 
-	test_client_with() do client
+	test_shutdown_client() do client
 		Redis.flushall(client)
 		Redis.set(client, "KEY", "VAL")
 		Redis.set(client, "KEY2", "VAL2")
@@ -133,18 +134,18 @@ function test_shutdown_methods()
 		Redis.set(client, "KEY4", "VAL4")
 
 		Redis.shutdown(client, false)
-		open(`netstat -lntp`) do procss
+		open(`netstat -lnt`) do procss
 			r = readall(procss)
 			@test contains(r, "9999") == false
 		end
 	end
-	test_client_with(c -> @test Redis.dbsize(c) == 0)
+	test_dirty_client_with(c -> @test Redis.dbsize(c) == 0)
 end
 
-test_client_with(test_methods)
+test_clean_client_with(test_methods)
 warn("These involve time specific commands so they may take some time")
-test_client_with(test_long_running_bgsave)
-test_client_with(test_long_running_save_background)
-test_client_with(test_long_save)
-test_client_with(test_long_running_bgrewriteaof)
-#test_shutdown_methods()
+test_clean_client_with(test_long_running_bgsave)
+test_clean_client_with(test_long_running_save_background)
+test_clean_client_with(test_long_save)
+test_clean_client_with(test_long_running_bgrewriteaof)
+test_shutdown_methods()
