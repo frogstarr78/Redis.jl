@@ -45,6 +45,8 @@ function test_type_methods(client)
 	@test Redis.typeof(client, "SET") == "set" 
 	Redis.hset(client, "HASH", "FIELD", "VAL")
 	@test Redis.typeof(client, "HASH") == "hash" 
+	Redis.lpush(client, "LIST", "VAL")
+	@test Redis.typeof(client, "LIST") == "list" 
 	warn("Need to make additional tests for typeof method")
 end
 
