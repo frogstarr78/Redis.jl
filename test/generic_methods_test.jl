@@ -41,31 +41,12 @@ end
 function test_type_methods(client)
 	Redis.set(client, "KEY", 2)
 	@test Redis.typeof(client, "KEY") == "string" 
+	Redis.sadd(client, "SET", "VAL")
+	@test Redis.typeof(client, "SET") == "set" 
+	Redis.hset(client, "HASH", "FIELD", "VAL")
+	@test Redis.typeof(client, "HASH") == "hash" 
 	warn("Need to make additional tests for typeof method")
 end
 
 test_client_with(test_methods)
 test_client_with(test_type_methods)
-
-##del generic
-#dump generic
-##exists generic
-#expire generic
-#expireat generic
-##keys generic
-#migrate generic
-#move generic
-#object generic
-#persist generic
-#pexpire generic
-#pexpireat generic
-##pttl generic
-#randomkey generic
-#rename generic
-#renamenx generic
-#restore generic
-#scan generic
-#sort generic
-##ttl generic
-##type generic
-#wait generic
