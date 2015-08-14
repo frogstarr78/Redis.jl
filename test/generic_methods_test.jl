@@ -35,7 +35,37 @@ function test_expire_methods(client)
 	@test Redis.exists(client, "KEY") == 1
 	@test Redis.ttl(client, "KEY") == -1
 	@test Redis.exists(client, "KEY", "KEY", "KEY") == 3
-	warn("Need to make additional tests for expire methods")
+end
+
+function test_expireat_method(client)
+	Redis.set(client, "KEY", 2)
+	ttl = 3
+	when = parseint(strftime("%s", time()))+ttl
+	@test Redis.expireat(client, "KEY", when)
+	@test Redis.ttl(client, "KEY") <= ttl
+	sleep(ttl)
+	@test Redis.exists(client, "KEY") == 0
+end
+
+function test_pexpire_methods(client)
+	Redis.set(client, "KEY", 2)
+	@test Redis.exists(client, "KEY") == true
+	@test Redis.pexpire(client, "KEY", 400) == true
+	@test Redis.ttl(client, "KEY") == 0
+	@test Redis.pttl(client, "KEY") <= 400
+	sleep(0.41)
+	@test Redis.exists(client, "KEY") == false
+end
+
+function test_pexpireat_methods(client)
+	Redis.set(client, "KEY", 2)
+	ttl = 400
+	when = parseint(string(strftime("%s", time()), ttl))
+	@test Redis.expireat(client, "KEY", when)
+	@printf "pttl '%s', when '%s'\n" Redis.pttl(client, "KEY") when
+	@test Redis.pttl(client, "KEY") <= when
+	sleep(0.41)
+	@test Redis.exists(client, "KEY") == 0
 end
 
 function test_type_methods(client)
@@ -47,9 +77,24 @@ function test_type_methods(client)
 	@test Redis.typeof(client, "HASH") == "hash" 
 	Redis.lpush(client, "LIST", "VAL")
 	@test Redis.typeof(client, "LIST") == "list" 
+
 	warn("Need to make additional tests for typeof method")
+end
+
+function test_random(client)
+	Redis.set(client, "KEY", "sval")
+	Redis.lpush(client, "LKEY", "lkey")
+	Redis.sadd(client, "SKEY", "setval")
+	Redis.hset(client, "HKEY", "hfield", "hval")
+
+	r = Redis.randomkey(client)
+	@test r in ["KEY", "LKEY", "SKEY", "HKEY"]
 end
 
 test_clean_client_with(test_methods)
 test_clean_client_with(test_expire_methods)
+test_clean_client_with(test_expireat_method)
+test_clean_client_with(test_pexpire_methods)
+#test_clean_client_with(test_pexpireat_methods)
 test_clean_client_with(test_type_methods)
+test_clean_client_with(test_random)
