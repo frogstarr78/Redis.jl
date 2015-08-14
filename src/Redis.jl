@@ -236,13 +236,13 @@ ping(sock::IO)                                                                  
 #quit(sock::IO)                                                                                             =  ( r = send(sock, "QUIT"); isopen(sock) ? (close(sock); r) : r )
 function quit(sock::IO)
 	r = send(sock, "QUIT");
-	if isopen(sock) 
-		close(sock)
-	end
+	isopen(sock) && close(sock)
 	r
 end
-# consider adding a select method which can run one specific command on the specified database
+# TODO: consider adding a select method which can run one specific command on the specified database
 select!(sock::IO,       index::Int64)                                                                      =  send(sock, "SELECT",       string(index))
+#TODO: client side current database; would need to change how we connect though, to keep track of this.
+#current(sock::IO)                        =  ( sock.database )
 
 #!generic group
 del(sock::IO,           keys::String...)                                                                   =  send(sock, "DEL",          keys...)
