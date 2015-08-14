@@ -10,6 +10,9 @@ EXPECTATIONS = {
 	Bool => Set([
 		"del",
 		"expire",
+		"expireat",
+		"pexpire",
+		"pexpireat",
 		"hset",
 		"move",
 		"msetnx",
@@ -17,7 +20,7 @@ EXPECTATIONS = {
 		"sismember"
 	]),
 	Dict => Set(["hgetall"]),
-	Float64 => Set(["incrbyfloat", "hincrbyfloat"]),
+	Float64 => Set(["incrbyfloat", "hincrbyfloat", "zscore"]),
 	Int => Set([
 		"append",
 		"bitcount",
@@ -46,10 +49,14 @@ EXPECTATIONS = {
 		"setbit",
 		"setrange",
 		"smove",
+
 		"srem",
 		"strlen",
 		"sunionstore",
-		"ttl"
+		"ttl",
+		"zadd",
+		"zcard",
+		"zrank"
 	]),
 	Set => Set([
 		"smembers",
@@ -77,6 +84,7 @@ EXPECTATIONS = {
 		"mset",
 		"ping",
 		"quit",
+		"randomkey",
 		"rename",
 		"renamenx",
 		"rpop",
@@ -107,7 +115,7 @@ end
 function decode_response(sock::IO, cmd_called, sub_parse=false)
 	resp = readuntil(sock, CRLF)
 	resp = strip(resp, CRLFc)
-#	println("running command '$cmd_called' resp '$resp'")
+	println("running command '$cmd_called' resp '$resp'")
 	if resp[1] == '+'
 		if lowercase(cmd_called) in EXPECTATIONS[String] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 			return resp[2:end]
@@ -198,7 +206,11 @@ function client(;socket::String="", host::IpAddr=ip"127.0.0.1", port::Int64=6379
 	return c
 end
 
-send(sock::TcpSocket,          redis_cmd::String, args...) = ( write(sock, redis_type([redis_cmd, args...]));                     decode_response(sock, redis_cmd) )
+function send(sock::TcpSocket, redis_cmd::String, args...)
+#	@printf "sending '%s'\n" redis_type([redis_cmd, args...])
+	write(sock, redis_type([redis_cmd, args...]))
+	decode_response(sock, redis_cmd)
+end
 shutdown(sock::IO, save::Bool)                             = ( write(sock, redis_type(["SHUTDOWN", save ? "SAVE" : "NOSAVE"]));   readall(sock); close(sock);          "" )
 shutdown(sock::IO)                                         = ( write(sock, redis_type(["SHUTDOWN"]));                             readall(sock); close(sock);          "" )
 function shutdown(sock::IO, save::String)
@@ -244,16 +256,16 @@ function exists(client::IO,        keys::String...)
 #	end
 end
 expire(sock::IO,        key::String,                  by::Int64)                                           =  send(sock, "EXPIRE",       key,                string(by))
-#expireat
+expireat(sock::IO,      key::String,                  when::Int64)                                         =  send(sock, "EXPIREAT",     key,                string(when))
 keys(sock::IO,          matching::String="*")                                                              =  send(sock, "KEYS",         matching)
 #migrate
 move(sock::IO,          key::String,                  index::Int64)                                        =  send(sock, "MOVE",         key,                string(index))
 #object
 persist(sock::IO,       key::String)                                                                       =  send(sock, "PERSIST",      key)
-#pexpire
-#pexpireat
+pexpire(sock::IO,       key::String,                  when::Int64)                                         =  send(sock, "PEXPIRE",      key,                string(when))
+pexpireat(sock::IO,     key::String,                  when::Int64)                                         =  send(send, "PEXPIREAT",    key,                string(when))
 pttl(sock::IO,          key::String)                                                                       =  send(sock, "PTTL",         key)
-#randomkey
+randomkey(sock::IO)                                                                                        =  send(sock, "RANDOMKEY")
 rename(sock::IO,        key::String,                  newkey::String;     not_exists=false)                =  send(sock, "RENAME",       key,                 newkey)
 renamenx(sock::IO,      key::String,                  newkey::String)                                      =  rename(sock, key,          newkey,              not_exists=true)
 #restore
@@ -313,7 +325,10 @@ function set(sock::IO, key::String, value::Any; sec_expire::Int=-1, ms_expire::I
 	cmd_msg = String["SET", key, value]
 	sec_expire > -1 && push!(cmd_msg, "EX", string(sec_expire))
 	ms_expire > -1 && push!(cmd_msg, "PX", string(ms_expire))
-	not_exists && if_exists && error("not_exists and if_exists cannot be set simultaneously")
+	if not_exists && if_exists
+		error("not_exists and if_exists cannot be set simultaneously")
+		return 0
+	end
 	not_exists && push!(cmd_msg, "NX")
 	if_exists && push!(cmd_msg, "XX")
 
@@ -412,8 +427,31 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 #unsubscribe
 
 #!sorted sets
-#zadd
-#zcard
+function zadd(sock::IO, key::String, score_members::Array{ASCIIString}; not_exists::Bool=false, if_exists::Bool=false, changes::Bool=false, incr::Bool=false)
+	options = Array{ASCIIString,1}
+	if if_exists && not_exists
+		error("Cannot simultaneously specify if_exists and not_exists.")
+		return 0
+	end
+	not_exists == true && push!(options, "NX")
+	if_exists  == true && push!(options, "XX")
+	changes    == true && push!(options, "CH")
+	incr       == true && push!(options, "INCR")
+	if length(options) > 0
+		send(sock, "ZADD", key, options..., score_members...)
+	else
+		send(sock, "ZADD", key, score_members...)
+	end
+end
+zadd(sock::IO,     key::String,                                                score_members::Array{Any};  not_exists::Bool=false, if_exists::Bool=false, changes::Bool=false, incr::Bool=false) = zadd(sock, key, collect(map(string, score_members)), not_exists=not_exists,       if_exists=if_exists,        changes=changes,           incr=incr)
+zadd(sock::IO,     key::String,                                                score_members::Any...;      not_exists::Bool=false, if_exists::Bool=false, changes::Bool=false, incr::Bool=false) = zadd(sock, key, collect(map(string, score_members)), not_exists=not_exists,       if_exists=if_exists,        changes=changes,           incr=incr)
+zadd(sock::IO,     key::String, exists::String, changes::String, incr::String, score_members::Array{Any})  = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"), changes=(changes == "CH"), incr=(incr == "INCR"))
+zadd(sock::IO,     key::String, exists::String, changes::String, incr::String, score_members::Any...)      = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"), changes=(changes == "CH"), incr=(incr == "INCR"))
+zadd(sock::IO,     key::String, exists::String, changes::String,               score_members::Array{Any})  = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"), changes=(changes == "CH"))
+zadd(sock::IO,     key::String, exists::String, changes::String,               score_members::Any...)      = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"), changes=(changes == "CH"))
+zadd(sock::IO,     key::String, exists::String,                                score_members::Array{Any})  = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"))
+zadd(sock::IO,     key::String, exists::String,                                score_members::Any...)      = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"))
+zcard(sock::IO,    key::String)                                                                            = send(sock,  "ZCARD",    key)
 #zcount
 #zincrby
 #zinterstore
@@ -421,7 +459,7 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 #zrange
 #zrangebylex
 #zrangebyscore
-#zrank
+zrank(sock::IO,    key::String,  member::String)                                                           = send(sock,  "ZRANK",   key,  member)
 #zrem
 #zremrangebylex
 #zremrangebyrank
@@ -431,7 +469,7 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 #zrevrangebyscore
 #zrevrank
 #zscan
-#zscore
+zscore(sock::IO,   key::String,  member::String)                                                           = send(sock,  "ZSCORE",  key,  member)
 #zunionstore
 #!end sorted sets
 
