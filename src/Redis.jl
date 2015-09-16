@@ -20,7 +20,12 @@ EXPECTATIONS = {
 		"sismember"
 	]),
 	Dict => Set(["hgetall"]),
-	Float64 => Set(["incrbyfloat", "hincrbyfloat", "zscore"]),
+	Float64 => Set([
+		"incrbyfloat",
+		"hincrbyfloat",
+		"zadd",
+		"zscore"
+	]),
 	Int => Set([
 		"append",
 		"bitcount",
@@ -49,13 +54,13 @@ EXPECTATIONS = {
 		"setbit",
 		"setrange",
 		"smove",
-
 		"srem",
 		"strlen",
 		"sunionstore",
 		"ttl",
 		"zadd",
 		"zcard",
+		"zcount",
 		"zrank"
 	]),
 	Set => Set([
@@ -115,7 +120,7 @@ end
 function decode_response(sock::IO, cmd_called, sub_parse=false)
 	resp = readuntil(sock, CRLF)
 	resp = strip(resp, CRLFc)
-	println("running command '$cmd_called' resp '$resp'")
+#	println("running command '$cmd_called' resp '$resp'")
 	if resp[1] == '+'
 		if lowercase(cmd_called) in EXPECTATIONS[String] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 			return resp[2:end]
@@ -182,7 +187,7 @@ function decode_response(sock::IO, cmd_called, sub_parse=false)
 #			throw(KeyError(EXPECTATIONS))
 		end
 	else
-#		@printf "*cmd_called '%s'\n" cmd_called
+		println("running command '$cmd_called' resp '$resp'")
 		throw(KeyError(EXPECTATIONS))
 	end
 end
@@ -309,17 +314,18 @@ get(sock::IO,           key::Char)                                              
 get(sock::IO,           key::Int64)                                                                       = get(sock,         string(key))
 
 
-mget(sock::IO,          keys::Array{ASCIIString};     sorted=false)                                       = ( r =      send(sock, "MGET",   keys...);        sorted ? sort(r) : r )
-mget(sock::IO,          keys::Any...;                 sorted=false)                                       = mget(sock, collect(map(string,  keys)),          sorted=sorted)
-mget(sock::IO,          keys::Array;                  sorted=false)                                       = mget(sock, collect(map(string,  keys)),          sorted=sorted)
+mget(sock::IO,          keys::Array;                  sorted=false)                                       = ( r =      send(sock, "MGET",   map(string, keys));        sorted ? sort(r) : r )
+mget(sock::IO,          keys::Any...;                 sorted=false)                                       = mget(sock, map(string,  keys),          sorted=sorted)
+#mget(sock::IO,          keys::Array;                  sorted=false)                                       = mget(sock, map(string,  keys),          sorted=sorted)
 get(sock::IO,           keys::Any...;                 sorted=false)                                       = mget(sock, keys...,             sorted=sorted)
 get(sock::IO,           keys::Array;                  sorted=false)                                       = mget(sock, keys...,             sorted=sorted)
 
-mset(sock::IO,          key_val::Array{ASCIIString};  not_exists=false)                                   = send(sock, not_exists ?         "MSETNX" :       "MSET",    key_val...)
-mset(sock::IO,          key_val::Array;               not_exists=false)                                   = mset(sock, collect(map(string,  key_val)),       not_exists=not_exists)
-mset(sock::IO,          keys::Any...;                 not_exists=false)                                   = mset(sock, collect(map(string,  keys)),          not_exists=not_exists)
-msetnx(sock::IO,        key_val::Array)                                                                   = mset(sock, collect(map(string,  key_val)),       not_exists=true)
-msetnx(sock::IO,        keys::Any...)                                                                     = mset(sock, collect(map(string,  keys)),          not_exists=true)
+mset(sock::IO,          key_val::Array;               not_exists=false)                                   = send(sock, not_exists ?         "MSETNX" :       "MSET",    collect(map(string, key_val)))
+#mset(sock::IO,          key_val::Array;               not_exists=false)                                   = send(sock, not_exists ?         "MSETNX" :       "MSET",    collect(map(string, key_val))...)
+#mset(sock::IO,          key_val::Array;               not_exists=false)                                   = mset(sock, map(string,  key_val),       not_exists=not_exists)
+mset(sock::IO,          keys::Any...;                 not_exists=false)                                   = mset(sock, keys,          not_exists=not_exists)
+msetnx(sock::IO,        key_val::Array)                                                                   = mset(sock, key_val,       not_exists=true)
+msetnx(sock::IO,        keys::Any...)                                                                     = mset(sock, keys,          not_exists=true)
 
 function set(sock::IO, key::String, value::Any; sec_expire::Int=-1, ms_expire::Int=-1, not_exists::Bool=false, if_exists::Bool=false)
 	cmd_msg = String["SET", key, value]
@@ -345,7 +351,7 @@ end
 
 set(sock::IO,     key::String,      val::Char)                     = set(sock,  key,               string(val))
 set(sock::IO,     key::String,      val::Int64)                    = set(sock,  key,               string(val))
-set(sock::IO,     key_val::Any...)                                 = set(sock,  collect(key_val))
+set(sock::IO,     key_val::Any...)                                 = set(sock,  map(string, key_val))
 setex(sock::IO,   key::String,      seconds::Int,      value::Any) = set(sock,  key,               value,        sec_expire=seconds)
 setnx(sock::IO,   key::String,      value::Any)                    = set(sock,  key,               value,        not_exists=true)
 psetex(sock::IO,  key::String,      milliseconds::Int, value::Any) = set(sock,  key,               value,        ms_expire=milliseconds)
@@ -370,11 +376,11 @@ hincrbyfloat(sock::IO, key::String,  field::String,     by::Real)               
 
 hkeys(sock::IO,        key::String;  sorted=false)                                               = ( r = send(sock,   "HKEYS",        key);  sorted ?      sort(r) : r )
 hlen(sock::IO,         key::String)                                                              = send(sock,         "HLEN",         key)
-hmget(sock::IO,        key::String,  fields::Array{ASCIIString})                                 = send(sock,         "HMGET",        key,                 fields...)
-hmget(sock::IO,        key::String,  fields::Any...)                                             = hmget(sock,        key,            collect(map(string,  fields)))
-hmset(sock::IO,        key::String,  field_vals::Array{ASCIIString})                             = send(sock,         "HMSET",        key,                 field_vals...)
-hmset(sock::IO,        key::String,  field_vals::Array)                                          = hmset(sock,        key,            collect(map(string,  field_vals)))
-hmset(sock::IO,        key::String,  field_vals::Any...)                                         = hmset(sock,        key,            collect(map(string,  field_vals)))
+#hmget(sock::IO,        key::String,  fields::Array{String})                                      = send(sock,         "HMGET",        key,                 fields...)
+hmget(sock::IO,        key::String,  fields::Array)                                              = send(sock,         "HMGET",        key,                 map(string, fields)...)
+hmget(sock::IO,        key::String,  fields::Any...)                                             = hmget(sock,        key,            map(string,  fields))
+hmset(sock::IO,        key::String,  field_vals::Array)                                          = send(sock,         "HMSET",        key,            map(string,  field_vals)...)
+hmset(sock::IO,        key::String,  field_vals::Any...)                                         = hmset(sock,        key,            map(string,  field_vals))
 #hscan
 hset(sock::IO,         key::String,  field::String,     value::String;  not_exists::Bool=false)  = send(sock,         not_exists ? "HSETNX" : "HSET",       key,   field,    value)
 hset(sock::IO,         key::String,  field::String,     value::Any;     not_exists::Bool=false)  = hset(sock,         key,            field, string(value), not_exists=not_exists)
@@ -427,8 +433,8 @@ sunionstore(sock::IO,   destination::String,         key::String,          keys:
 #unsubscribe
 
 #!sorted sets
-function zadd(sock::IO, key::String, score_members::Array{ASCIIString}; not_exists::Bool=false, if_exists::Bool=false, changes::Bool=false, incr::Bool=false)
-	options = Array{ASCIIString,1}
+function zadd(sock::IO, key::String, score_members::Array; not_exists::Bool=false, if_exists::Bool=false, changes::Bool=false, incr::Bool=false)
+	options = String[]
 	if if_exists && not_exists
 		error("Cannot simultaneously specify if_exists and not_exists.")
 		return 0
@@ -438,21 +444,20 @@ function zadd(sock::IO, key::String, score_members::Array{ASCIIString}; not_exis
 	changes    == true && push!(options, "CH")
 	incr       == true && push!(options, "INCR")
 	if length(options) > 0
-		send(sock, "ZADD", key, options..., score_members...)
+		send(sock, "ZADD", key, options..., map(string, score_members)...)
 	else
-		send(sock, "ZADD", key, score_members...)
+		send(sock, "ZADD", key, map(string, score_members)...)
 	end
 end
-zadd(sock::IO,     key::String,                                                score_members::Array{Any};  not_exists::Bool=false, if_exists::Bool=false, changes::Bool=false, incr::Bool=false) = zadd(sock, key, collect(map(string, score_members)), not_exists=not_exists,       if_exists=if_exists,        changes=changes,           incr=incr)
-zadd(sock::IO,     key::String,                                                score_members::Any...;      not_exists::Bool=false, if_exists::Bool=false, changes::Bool=false, incr::Bool=false) = zadd(sock, key, collect(map(string, score_members)), not_exists=not_exists,       if_exists=if_exists,        changes=changes,           incr=incr)
-zadd(sock::IO,     key::String, exists::String, changes::String, incr::String, score_members::Array{Any})  = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"), changes=(changes == "CH"), incr=(incr == "INCR"))
-zadd(sock::IO,     key::String, exists::String, changes::String, incr::String, score_members::Any...)      = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"), changes=(changes == "CH"), incr=(incr == "INCR"))
-zadd(sock::IO,     key::String, exists::String, changes::String,               score_members::Array{Any})  = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"), changes=(changes == "CH"))
-zadd(sock::IO,     key::String, exists::String, changes::String,               score_members::Any...)      = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"), changes=(changes == "CH"))
-zadd(sock::IO,     key::String, exists::String,                                score_members::Array{Any})  = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"))
-zadd(sock::IO,     key::String, exists::String,                                score_members::Any...)      = zadd(sock, key, collect(map(string, score_members)), not_exists=(exists == "NX"), if_exists=(exists == "XX"))
-zcard(sock::IO,    key::String)                                                                            = send(sock,  "ZCARD",    key)
-#zcount
+zadd(sock::IO,     key::String,                                                score_members::Any...;  not_exists::Bool=false, if_exists::Bool=false, changes::Bool=false, incr::Bool=false) = zadd(sock, key, map(string, score_members), not_exists=not_exists,       if_exists=if_exists,        changes=changes,           incr=incr)
+zadd(sock::IO,     key::String, exists::String, changes::String, incr::String, score_members::Array)  = zadd(sock, key,      map(string, score_members), not_exists=(exists == "NX"),  if_exists=(exists == "XX"),  changes=(changes == "CH"), incr=(incr == "INCR"))
+zadd(sock::IO,     key::String, exists::String, changes::String, incr::String, score_members::Any...) = zadd(sock, key,      map(string, score_members), not_exists=(exists == "NX"),  if_exists=(exists == "XX"),  changes=(changes == "CH"), incr=(incr == "INCR"))
+zadd(sock::IO,     key::String, exists::String, chinc::String,                 score_members::Array)  = zadd(sock, key,      map(string, score_members), not_exists=(exists == "NX"),  if_exists=(exists == "XX"),  changes=(chinc == "CH"),   incr=(chinc == "INCR"))
+zadd(sock::IO,     key::String, exists::String, chinc::String,                 score_members::Any...) = zadd(sock, key,      map(string, score_members), not_exists=(exists == "NX"),  if_exists=(exists == "XX"),  changes=(chinc == "CH"),   incr=(chinc == "INCR"))
+zadd(sock::IO,     key::String, exchinc::String,                               score_members::Array)  = zadd(sock, key,      map(string, score_members), not_exists=(exchinc == "NX"), if_exists=(exchinc == "XX"), changes=(exchinc == "CH"), incr=(exchinc == "INCR"))
+zadd(sock::IO,     key::String, exchinc::String,                               score_members::Any...) = zadd(sock, key,      map(string, score_members), not_exists=(exchinc == "NX"), if_exists=(exchinc == "XX"), changes=(exchinc == "CH"), incr=(exchinc == "INCR"))
+zcard(sock::IO,    key::String)                                                                       = send(sock, "ZCARD",  key)
+zcount(sock::IO,   key::String, min::Number,    max::Number)                                          = send(sock, "ZCOUNT", key,                string(1.0min),  string(1.0max))
 #zincrby
 #zinterstore
 #zlexcount
@@ -488,18 +493,18 @@ end
 llen(sock::IO,       key::String)                                                        = send(sock,   "LLEN",      key)
 lpop(sock::IO,       key::String)                                                        = send(sock,   "LPOP",      key)
 
-function lpush(sock::IO, key::String, values::Array{ASCIIString}; if_exists::Bool=false)
+function lpush(sock::IO, key::String, values::Array; if_exists::Bool=false)
 	if if_exists
 		res = send(sock, "LPUSHX", key, shift!(values))
 		res == 0 && return 0
 		length(values) == 0 && return res
 	end
-	send(sock,   "LPUSH", key, values...)
+	send(sock,   "LPUSH", key, map(string, values)...)
 end
-#lpush(sock::IO,      key::String,   values::Array{ASCIIString};  if_exists::Bool=false)  = send(sock,   if_exists ?  "LPUSHX" : "LPUSH",           key,                 values...)
+#lpush(sock::IO,      key::String,   values::Array{String};       if_exists::Bool=false)  = send(sock,   if_exists ?  "LPUSHX" : "LPUSH",           key,                 values...)
 lpush(sock::IO,      key::String,   value::String;               if_exists::Bool=false)  = lpush(sock,  key,         [value],                      if_exists=if_exists)
-lpush(sock::IO,      key::String,   values::Array;               if_exists::Bool=false)  = lpush(sock,  key,         collect(map(string, values)), if_exists=if_exists)
-lpush(sock::IO,      key::String,   values::Any...;              if_exists::Bool=false)  = lpush(sock,  key,         collect(map(string, values)), if_exists=if_exists)
+#lpush(sock::IO,      key::String,   values::Array;               if_exists::Bool=false)  = lpush(sock,  key,         map(string, values), if_exists=if_exists)
+lpush(sock::IO,      key::String,   values::Any...;              if_exists::Bool=false)  = lpush(sock,  key,         map(string, values), if_exists=if_exists)
 
 lpushx(sock::IO,     key::String,   value::String)                                       = lpush(sock,  key,         value,     if_exists=true)
 
@@ -510,18 +515,18 @@ ltrim(sock::IO,      key::String,   start::Int64,                stop::Int64)   
 rpop(sock::IO,       key::String)                                                        = send(sock,   "RPOP",      key)
 rpoplpush(sock::IO,  skey::String,  dkey::String)                                        = send(sock,   "RPOPLPUSH", skey,      dkey)
 
-function rpush(sock::IO, key::String, values::Array{ASCIIString}; if_exists::Bool=false)
+function rpush(sock::IO, key::String, values::Array; if_exists::Bool=false)
 	if if_exists
 		res = send(sock, "RPUSHX", key, shift!(values))
 		res == 0 && return 0
 		length(values) == 0 && return res
 	end
-	send(sock,   "RPUSH", key, values...)
+	send(sock,   "RPUSH", key, map(string, values)...)
 end
-#rpush(sock::IO,      key::String,   values::Array{ASCIIString};  if_exists::Bool=false)  = send(sock,   if_exists ?  "RPUSHX" : "RPUSH", key,      values...)
+#rpush(sock::IO,      key::String,   values::Array{String};       if_exists::Bool=false)  = send(sock,   if_exists ?  "RPUSHX" : "RPUSH", key,      values...)
 rpush(sock::IO,      key::String,   value::String;               if_exists::Bool=false)  = rpush(sock,  key,         [value],                      if_exists=if_exists)
-rpush(sock::IO,      key::String,   values::Array;               if_exists::Bool=false)  = rpush(sock,  key,         collect(map(string, values)), if_exists=if_exists)
-rpush(sock::IO,      key::String,   values::Any...;              if_exists::Bool=false)  = rpush(sock,  key,         collect(map(string, values)), if_exists=if_exists)
+#rpush(sock::IO,      key::String,   values::Array;               if_exists::Bool=false)  = rpush(sock,  key,         map(string, values), if_exists=if_exists)
+rpush(sock::IO,      key::String,   values::Any...;              if_exists::Bool=false)  = rpush(sock,  key,         map(string, values), if_exists=if_exists)
 
 rpushx(sock::IO,     key::String,   value::String)                                       = rpush(sock,  key,         value,     if_exists=true)
 
@@ -530,13 +535,13 @@ lpop(sock::IO,       key::String,   count::Int64)                               
 lrange(sock::IO,     key::String)                                                        = lrange(sock, key, 0, -1)
 rpop(sock::IO,       key::String,   count::Int64)                                        = [rpop(sock,  key) for i = 1:count]
 
-lpushx(sock::IO,     key::String,   values::Array{ASCIIString})                          = lpush(sock,  key,         values,                       if_exists=true)
-lpushx(sock::IO,     key::String,   values::Array)                                       = lpush(sock,  key,         collect(map(string, values)), if_exists=true)
-lpushx(sock::IO,     key::String,   values::Any...)                                      = lpush(sock,  key,         collect(map(string, values)), if_exists=true)
+#lpushx(sock::IO,     key::String,   values::Array{String})                               = lpush(sock,  key,         values,                       if_exists=true)
+#lpushx(sock::IO,     key::String,   values::Array)                                       = lpush(sock,  key,         map(string, values), if_exists=true)
+lpushx(sock::IO,     key::String,   values::Any...)                                      = lpush(sock,  key,         map(string, values), if_exists=true)
 #
-rpushx(sock::IO,     key::String,   values::Array{ASCIIString})                          = rpush(sock,  key,         values,                       if_exists=true)
-rpushx(sock::IO,     key::String,   values::Array)                                       = rpush(sock,  key,         collect(map(string, values)), if_exists=true)
-rpushx(sock::IO,     key::String,   values::Any...)                                      = rpush(sock,  key,         collect(map(string, values)), if_exists=true)
+#rpushx(sock::IO,     key::String,   values::Array{String})                               = rpush(sock,  key,         values,                       if_exists=true)
+#rpushx(sock::IO,     key::String,   values::Array)                                       = rpush(sock,  key,         map(string, values), if_exists=true)
+rpushx(sock::IO,     key::String,   values::Any...)                                      = rpush(sock,  key,         map(string, values), if_exists=true)
 #!end lists
 
 #!scripting group

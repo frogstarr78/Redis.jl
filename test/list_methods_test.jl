@@ -4,12 +4,15 @@ using Base.Test
 include("test_client.jl")
 
 function test_methods(client)
-	@test Redis.lpush(client, "LISTK", "LVAL") == 1 == Redis.llen(client, "LISTK")
-	@test Redis.lpush(client, "LISTK", "LVAL2") == 2 == Redis.llen(client, "LISTK")
+	@test Redis.lpush(client, "LISTK", "LVAL") == 1
+	@test Redis.llen(client, "LISTK") == 1
+	@test Redis.lpush(client, "LISTK", "LVAL2") == 2
+	@test Redis.llen(client, "LISTK") == 2
 	@test Redis.lindex(client, "LISTK", 0) == "LVAL2"
 	@test Redis.lindex(client, "LISTK", 1) == "LVAL"
 	@test Redis.lindex(client, "LISTK", -1) == "LVAL"
-	@test Redis.rpush(client, "LISTK", "LVAL3") == 3 == Redis.llen(client, "LISTK")
+	@test Redis.rpush(client, "LISTK", "LVAL3") == 3
+	@test Redis.llen(client, "LISTK") == 3
 	@test Redis.lindex(client, "LISTK", -1) == "LVAL3"
 	@test Redis.lpop(client, "LISTK") == "LVAL2"
 	@test Redis.llen(client, "LISTK") == 2

@@ -31,7 +31,6 @@ function test_methods(client)
 end
 
 function test_multiple_methods(client)
-	Redis.flushdb(client)
 	@test Redis.hmset(client, "KEY", [["HKEY3" "HKEY4"], ["HVAL3" "HVAL4"]]) == "OK"
 	@test Redis.hgetall(client, "KEY") == ["HKEY3" => "HVAL3", "HKEY4" => "HVAL4"]
 	@test Redis.hmset(client, "KEY", ["HKEY5" "HVAL5"]) == "OK"
