@@ -1,7 +1,8 @@
 using Redis
 using Base.Test
 
-not_in(x, a) = !(x in a)
+#not_in(x, a) = !(x in a)
+not_in(x, a) = !any((y) -> x in y, values(a))
 
 #test simple string decodig
 klient = IOBuffer("+OK\r\n")

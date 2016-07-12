@@ -40,7 +40,7 @@ end
 function test_expireat_method(client)
 	Redis.set(client, "KEY", 2)
 	ttl = 3
-	when = parseint(strftime("%s", time()))+ttl
+	when = parse(Int,Libc.strftime("%s", time()))+ttl
 	@test Redis.expireat(client, "KEY", when)
 	@test Redis.ttl(client, "KEY") <= ttl
 	sleep(ttl)
@@ -60,7 +60,7 @@ end
 function test_pexpireat_methods(client)
 	Redis.set(client, "KEY", 2)
 	ttl = 400
-	when = parseint(string(strftime("%s", time()), ttl))
+	when = parse(Int,string(strftime("%s", time()), ttl))
 	@test Redis.expireat(client, "KEY", when)
 	@printf "pttl '%s', when '%s'\n" Redis.pttl(client, "KEY") when
 	@test Redis.pttl(client, "KEY") <= when

@@ -4,7 +4,7 @@ using Base.Test
 include("test_client.jl")
 
 function test_auth_methods()
-	run(`redis-server ${pwd()}/etc/redis.conf --requirepass pass`)
+	run(`redis-server $[pwd()]/etc/redis.conf --requirepass pass`)
 	try
 		klient = client(port=9999, password="pass")
 		@test Redis.set(klient, "key", "val") == "OK"
@@ -22,7 +22,7 @@ function test_auth_methods()
 		@test Redis.set(klient, "key", "val") == "OK"
 		close(klient)
 	catch e
-		error(e)
+		throw(e)
 	finally
 		run(`redis-cli -a pass -p 9999 SHUTDOWN`)
 	end
@@ -51,9 +51,9 @@ function test_database_select(client)
 end
 
 function test_select_on_connect()
-	run(`redis-server ${pwd()}/etc/redis.conf`)
+	run(`redis-server $[pwd()]/etc/redis.conf`)
 	sleep(1)
-	io = None
+	io = Union
 	try 
 		try
 			io = client(port=9999, db=1)
@@ -64,16 +64,14 @@ function test_select_on_connect()
 			@test Redis.select!(io, 0) == "OK"
 			@test Redis.dbsize(io) == 0
 		catch e
-			error(e)
+			throw(e)
 		finally
 			close(io)
 			run(`redis-cli -p 9999 SHUTDOWN`)
 		end
 	catch ee
-		if isopen(io) 
-			close(io)
-		end
-		error(ee)
+		isopen(io) || close(io)
+		throw(ee)
 	end
 end
 
