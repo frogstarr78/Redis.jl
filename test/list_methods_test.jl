@@ -24,7 +24,8 @@ function test_methods(client)
 	@test Redis.lset(client, "LISTK", 1, "LVAL5") == "OK"
 	@test Redis.llen(client, "LISTK") == 2
 	@test Redis.lindex(client, "LISTK", 1) == "LVAL5"
-	@test_throws Exception Redis.linsert(client, "LISTK", "ANYWHERE", "LVAL8", "LVAL9")
+	Redis.linsert(client, "LISTK", "ANYWHERE", "LVAL8", "LVAL9")
+	@test_throws Redis.InvalidInsertionMethodException Redis.linsert(client, "LISTK", "ANYWHERE", "LVAL8", "LVAL9")
 	@test Redis.linsert(client, "LISTK", "BEFORE", "LVAL5", "LVAL6") == 3
 	@test Redis.linsert(client, "LISTK", "after", "LVAL6", "LVAL7") == 4
 	@test Redis.linsert(client, "LISTK", "AFTER", "LVAL8", "LVAL9") == -1

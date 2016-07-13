@@ -509,11 +509,14 @@ zscore(sock::IO,   key::AbstractString,  member::AbstractString)                
 #brpop
 #brpoplpush
 lindex(sock::IO, key::AbstractString, index::Int64)                                              = send(sock,  "LINDEX",    key,       string(index))
+type InvalidInsertionMethodException <: Exception
+	retail::AbstractString
+end
 function linsert(sock::IO, key::AbstractString, how::AbstractString, where::AbstractString, value::AbstractString)
 	if lowercase(how) in ["before", "after"]
 		send(sock, "LINSERT", key, how, where, value)
 	else
-		throw("Unknown insertion method $how")
+		throw(InvalidInsertionMethodException("Unknown insertion method $how"))
 	end
 end
 llen(sock::IO,       key::AbstractString)                                                        = send(sock,   "LLEN",      key)
