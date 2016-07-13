@@ -12,3 +12,9 @@ cp_to_container:
 
 attach:
 	docker exec -it $(NAME) $(CMD)
+
+start:
+	docker start $(NAME)
+
+stop:
+	docker stop $(NAME)
