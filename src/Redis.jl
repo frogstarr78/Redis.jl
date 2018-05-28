@@ -123,6 +123,10 @@ type UnAuthException <: Exception end
 type ErrorException <: Exception
 	detail::AbstractString
 end
+type InvalidSectionException <: Exception
+	section::String
+end
+Base.showerror(io::IO, e::InvalidSectionException) = print(io, e.section. "Invalid section")
 
 parse_error_response(sock::IO, cmd_called, sub_parse, resp::AbstractString)   = throw(ErrorException(resp[2:end]))
 function parse_string_response(sock::IO, cmd_called, sub_parse, resp::AbstractString)
@@ -246,8 +250,8 @@ function send(sock::TCPSocket, redis_cmd::AbstractString, args...)
 	write(sock, redis_type([redis_cmd, args...]))
 	decode_response(sock, redis_cmd)
 end
-shutdown(sock::IO, save::Bool)                             = ( write(sock, redis_type(["SHUTDOWN", save ? "SAVE" : "NOSAVE"]));   read(sock, all=true); close(sock);          "" )
-shutdown(sock::IO)                                         = ( write(sock, redis_type(["SHUTDOWN"]));                             read(sock, all=true); close(sock);          "" )
+shutdown(sock::IO, save::Bool)                             = ( write(sock, redis_type(["SHUTDOWN", save ? "SAVE" : "NOSAVE"]));   read(sock); close(sock);          "" )
+shutdown(sock::IO)                                         = ( write(sock, redis_type(["SHUTDOWN"]));                             read(sock); close(sock);          "" )
 function shutdown(sock::IO, save::AbstractString)
 	if lowercase(save) == "save"
 		shutdown(sock, true)
@@ -644,7 +648,7 @@ function info(sock::IO, section::AbstractString="default")
 	elseif lowercase(section) in [ "all", "clients", "cluster", "commandstats", "cpu", "keyspace", "memory", "persistence", "replication", "server", "stats" ]
 		send(sock, "INFO", section)
 	else
-		throw("Invalid section '$section'")
+		throw(InvalidSectionException(section))
 	end
 end
 lastsave(sock::IO)                        =  send(sock, "LASTSAVE")

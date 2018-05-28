@@ -58,10 +58,10 @@ function test_methods(client)
 	@test contains(r, "redis_version") == false
 	@test r[1:10] == "# Keyspace"
 
-	@test_throws Exception Redis.info(client, "nonsection")
+	@test_throws Redis.InvalidSectionException Redis.info(client, "nonsection")
 
 	r = Redis.time(client)
-	@test isa(r, TmStruct)
+	@test isa(r, Libc.TmStruct)
 end
 
 function test_shutdown_methods()
@@ -76,7 +76,7 @@ function test_shutdown_methods()
 		@test isopen(client) == false
 		open(`netstat -lnt`) do procss
 			r = read(procss)
-			@test contains(r, "9999") == false
+			@test contains(join(map(Char, r), ""), "9999") == false
 		end
 	end
 	test_dirty_client_with(c -> @test Redis.dbsize(c) == 0)
@@ -91,7 +91,7 @@ function test_shutdown_methods()
 		Redis.shutdown(client, "save")
 		open(`netstat -lnt`) do procss
 			r = read(procss)
-			@test contains(r, "9999") == false
+			@test contains(join(map(Char, r), ""), "9999") == false
 		end
 	end
 	test_dirty_client_with(c -> @test Redis.dbsize(c) == 4)
@@ -106,7 +106,7 @@ function test_shutdown_methods()
 		Redis.shutdown(client, "nosave")
 		open(`netstat -lnt`) do procss
 			r = read(procss)
-			@test contains(r, "9999") == false
+			@test contains(join(map(Char, r), ""), "9999") == false
 		end
 	end
 	test_dirty_client_with(c -> @test Redis.dbsize(c) == 0)
@@ -121,7 +121,7 @@ function test_shutdown_methods()
 		Redis.shutdown(client, true)
 		open(`netstat -lnt`) do procss
 			r = read(procss)
-			@test contains(r, "9999") == false
+			@test contains(join(map(Char, r), ""), "9999") == false
 		end
 	end
 	test_dirty_client_with(c -> @test Redis.dbsize(c) == 4)
@@ -136,14 +136,14 @@ function test_shutdown_methods()
 		Redis.shutdown(client, false)
 		open(`netstat -lnt`) do procss
 			r = read(procss)
-			@test contains(r, "9999") == false
+			@test contains(join(map(Char, r), ""), "9999") == false
 		end
 	end
 	test_dirty_client_with(c -> @test Redis.dbsize(c) == 0)
 end
 
 test_clean_client_with(test_methods)
-warn("These involve time specific commands so they may take some time")
+warn("These involve time specific commands so they may take a while")
 test_clean_client_with(test_long_running_bgsave)
 test_clean_client_with(test_long_running_save_background)
 test_clean_client_with(test_long_save)
