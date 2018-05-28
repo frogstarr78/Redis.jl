@@ -24,7 +24,7 @@ function test_methods(client)
 	@test Redis.lset(client, "LISTK", 1, "LVAL5") == "OK"
 	@test Redis.llen(client, "LISTK") == 2
 	@test Redis.lindex(client, "LISTK", 1) == "LVAL5"
-	Redis.linsert(client, "LISTK", "ANYWHERE", "LVAL8", "LVAL9")
+#	Redis.linsert(client, "LISTK", "ANYWHERE", "LVAL8", "LVAL9")
 	@test_throws Redis.InvalidInsertionMethodException Redis.linsert(client, "LISTK", "ANYWHERE", "LVAL8", "LVAL9")
 	@test Redis.linsert(client, "LISTK", "BEFORE", "LVAL5", "LVAL6") == 3
 	@test Redis.linsert(client, "LISTK", "after", "LVAL6", "LVAL7") == 4
@@ -94,32 +94,34 @@ function test_methods(client)
 end
 
 function test_client_only_methods(client)
-	@test Redis.lpush(client, "KEE", "ONE", "TWO", "THREE", "FOUR", "FIVE") == 5 == Redis.llen(client, "KEE")
-	@test Redis.lrange(client, "KEE") == ["FIVE", "FOUR", "THREE", "TWO", "ONE"]
-	@test Redis.rpop(client, "KEE", 3) == ["ONE", "TWO", "THREE"]
-	@test Redis.rpush(client, "KEE", ["ONE", "TWO", "THREE"]) == 5 == Redis.llen(client, "KEE")
-	@test Redis.lrange(client, "KEE") == ["FIVE", "FOUR", "ONE", "TWO", "THREE"]
-	@test Redis.lpop(client, "KEE", 3) == ["FIVE", "FOUR", "ONE"]
+	@test Redis.lpush(client,  "KEE", "ONE", "TWO", "THREE", "FOUR", "FIVE") == 5 == Redis.llen(client, "KEE")
+	@test Redis.lrange(client, "KEE")    == ["FIVE", "FOUR", "THREE", "TWO", "ONE"]
+	@test Redis.rpop(client,   "KEE", 3) == ["ONE", "TWO", "THREE"]
+	@test Redis.llen(client,   "KEE")    == 2
+	@test Redis.rpush(client,  "KEE", ["ONE", "TWO", "THREE"]) == 5 == Redis.llen(client, "KEE")
+	@test Redis.lrange(client, "KEE")    == ["FIVE", "FOUR", "ONE", "TWO", "THREE"]
+	@test Redis.lpop(client,   "KEE", 3) == ["FIVE", "FOUR", "ONE"]
 
+	@test Redis.lpushx(client, "LKEE3", "xyz") == 0
 	@test Redis.lpushx(client, "LKEE3", "abc", "def") == 0
-	@test Redis.lpush(client, "LKEE3", "abc", "def") == 2
+	@test Redis.lpush(client,  "LKEE3", "abc", "def") == 2
 	@test Redis.lpushx(client, "LKEE3", "hij", "xyz") == 4
-	@test Redis.del(client, "LKEE3") == true
+	@test Redis.del(client,    "LKEE3") == true
 
 	@test Redis.lpush(client, "LKEE3", "abc", "def", if_exists=true) == 0
 	@test Redis.lpush(client, "LKEE3", "abc", "def") == 2
 	@test Redis.lpush(client, "LKEE3", "hij", "xyz", if_exists=true) == 4
-	@test Redis.del(client, "LKEE3") == true
+	@test Redis.del(client,   "LKEE3") == true
 
 	@test Redis.rpushx(client, "LKEE3", "abc") == 0
-	@test Redis.rpush(client, "LKEE3", "abc", "def") == 2
+	@test Redis.rpush(client,  "LKEE3", "abc", "def") == 2
 	@test Redis.rpushx(client, "LKEE3", "hij", "xyz") == 4
-	@test Redis.del(client, "LKEE3") == true
+	@test Redis.del(client,    "LKEE3") == true
 
 	@test Redis.rpush(client, "LKEE3", "abc", if_exists=true) == 0
 	@test Redis.rpush(client, "LKEE3", "abc", "def") == 2
 	@test Redis.rpush(client, "LKEE3", "hij", "xyz", if_exists=true) == 4
-	@test Redis.del(client, "LKEE3") == true
+	@test Redis.del(client,   "LKEE3") == true
 end
 
 function test_atomic_methods(client)

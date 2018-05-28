@@ -75,7 +75,7 @@ function test_shutdown_methods()
 		Redis.shutdown(client)
 		@test isopen(client) == false
 		open(`netstat -lnt`) do procss
-			r = readall(procss)
+			r = read(procss)
 			@test contains(r, "9999") == false
 		end
 	end
@@ -90,7 +90,7 @@ function test_shutdown_methods()
 
 		Redis.shutdown(client, "save")
 		open(`netstat -lnt`) do procss
-			r = readall(procss)
+			r = read(procss)
 			@test contains(r, "9999") == false
 		end
 	end
@@ -105,7 +105,7 @@ function test_shutdown_methods()
 
 		Redis.shutdown(client, "nosave")
 		open(`netstat -lnt`) do procss
-			r = readall(procss)
+			r = read(procss)
 			@test contains(r, "9999") == false
 		end
 	end
@@ -120,7 +120,7 @@ function test_shutdown_methods()
 
 		Redis.shutdown(client, true)
 		open(`netstat -lnt`) do procss
-			r = readall(procss)
+			r = read(procss)
 			@test contains(r, "9999") == false
 		end
 	end
@@ -135,7 +135,7 @@ function test_shutdown_methods()
 
 		Redis.shutdown(client, false)
 		open(`netstat -lnt`) do procss
-			r = readall(procss)
+			r = read(procss)
 			@test contains(r, "9999") == false
 		end
 	end

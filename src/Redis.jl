@@ -1,11 +1,12 @@
 module Redis
 
-import Base: TcpSocket, IPAddr
+import Base: TCPSocket, IPAddr
+import Base
 export client
 
 CRLFc = ['\r', '\n']
 CRLF = join(CRLFc)
-EXPECTATIONS = Dict{DataType,Set}(
+EXPECTATIONS = Dict{Type,Set}(
 	Array => Set([ "hkeys", "hvals", "hmget", "keys", "lrange", "mget" ]),
 	Bool => Set([
 		"del",
@@ -20,7 +21,7 @@ EXPECTATIONS = Dict{DataType,Set}(
 		"sismember"
 	]),
 	Dict => Set(["hgetall"]),
-	Float64 => Set([
+	AbstractFloat => Set([
 		"incrbyfloat",
 		"hincrbyfloat",
 		"zadd",
@@ -103,9 +104,10 @@ EXPECTATIONS = Dict{DataType,Set}(
 	Libc.TmStruct => Set(["lastsave", "time"])
 )
 
+redis_type(arg::Void)                           = string('$', -1, CRLF)
 redis_type(arg::AbstractString; simple::Bool=false) = (simple ? string('+', arg, CRLF ) : string('$', join([length(arg), arg], CRLF), CRLF))
-redis_type(arg::Union)                  = string('$', -1, CRLF)
-redis_type(arg::Number)                     = string(':', arg, CRLF)
+#redis_type(arg::Union)                              = string('$', -1, CRLF)
+redis_type(arg::Number)                             = string(':', arg, CRLF)
 function redis_type(arg::Array)
 	arg[1] = uppercase(arg[1])
 	len = length(arg)
@@ -146,25 +148,27 @@ function parse_int_response(sock::IO, cmd_called, sub_parse, resp::AbstractStrin
 end
 
 function parse_bulk_string_response(sock::IO, cmd_called, sub_parse, resp::AbstractString)
-#	@printf "sub_parse '%s', in EXPECTATIONS '%s'\n" sub_parse ( lowercase(cmd_called) in EXPECTATIONS[Array] || lowercase(cmd_called) in EXPECTATIONS[Set] || lowercase(cmd_called) in EXPECTATIONS[Dict] )
+#	@printf "cmd_called '%s', sub_parse '%s', in EXPECTATIONS '%s'\n" cmd_called sub_parse ( lowercase(cmd_called) in EXPECTATIONS[AbstractString] || lowercase(cmd_called) in EXPECTATIONS[Set] || ( sub_parse && ( lowercase(cmd_called) in EXPECTATIONS[Array] || lowercase(cmd_called) in EXPECTATIONS[Dict] ) ) )
+#	@printf "cmd_called '%s', sub_parse '%s', in EXPECTATIONS '%s'\n" cmd_called sub_parse ( lowercase(cmd_called) in EXPECTATIONS[AbstractFloat] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] ) )
+#	@printf "cmd_called '%s', sub_parse '%s', in EXPECTATIONS '%s'\n" cmd_called sub_parse ( lowercase(cmd_called) in EXPECTATIONS[Libc.TmStruct] && sub_parse )
 	if lowercase(cmd_called) in EXPECTATIONS[AbstractString] || lowercase(cmd_called) in EXPECTATIONS[Set] || ( sub_parse && ( lowercase(cmd_called) in EXPECTATIONS[Array] || lowercase(cmd_called) in EXPECTATIONS[Dict] ) )
 		len = parse(Int,resp[2:end])
 		if len == -1
-			return ""
+			return nothing
 		else
-			r = join(map(Char,readbytes(sock, len)))
-			readuntil(sock, CRLF)
+			r = join(map(Char, read(sock, len)))
+			readline(sock) #emptying the io buffer
 			return r
 		end
-	elseif lowercase(cmd_called) in EXPECTATIONS[Float64] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
+	elseif lowercase(cmd_called) in EXPECTATIONS[AbstractFloat] || ( sub_parse && lowercase(cmd_called) in EXPECTATIONS[Array] )
 		len = parse(Int,resp[2:end])
-		r = join(map(Char,readbytes(sock, len)))
-		readuntil(sock, CRLF)
+		r = join(map(Char, read(sock, len)))
+		readline(sock) #emptying the io buffer
 		return parse(Float64,r)
 	elseif lowercase(cmd_called) in EXPECTATIONS[Libc.TmStruct] && sub_parse
 		len = parse(Int,resp[2:end])
-		r = join(map(Char,readbytes(sock, len)))
-		readuntil(sock, CRLF)
+		r = join(map(Char, read(sock, len)))
+		readline(sock) #emptying the io buffer
 		return r
 	else
 #		@printf "\$cmd_called '%s'\n" cmd_called
@@ -200,8 +204,8 @@ function parse_unknown_response(sock::IO, cmd_called, sub_parse, resp::AbstractS
 end
 
 function decode_response(sock::IO, cmd_called, sub_parse=false)
-	resp = readuntil(sock, CRLF)
-	resp = strip(resp, CRLFc)
+	resp = readline(sock, chomp=true)
+#	resp = strip(resp, CRLFc)
 #	println("running command '$cmd_called' resp '$resp'")
 	if resp[1] == '+'
 		return parse_string_response(sock, cmd_called, sub_parse, resp)
@@ -221,16 +225,16 @@ end
 immutable Connection
 	socket_file::AbstractString
 	host::IPAddr
-	port::Int64
+	port::Integer
 	password::AbstractString
-	database::Int64
+	database::Integer
 
 	socket::TCPSocket
 
 	Connection() = new("", ip"127.0.0.1", 6379, "", 0)
 end
 
-function client(;socket::AbstractString="", host::IPAddr=ip"127.0.0.1", port::Int64=6379, password::AbstractString="", db::Int64=0)
+function client(;socket::AbstractString="", host::IPAddr=ip"127.0.0.1", port::Integer=6379, password::AbstractString="", db::Integer=0)
 	c = socket == "" ? connect(host, port) : connect(socket)
 	password == "" || auth(c, password)
 	db == 0 || select!(c, db)
@@ -242,8 +246,8 @@ function send(sock::TCPSocket, redis_cmd::AbstractString, args...)
 	write(sock, redis_type([redis_cmd, args...]))
 	decode_response(sock, redis_cmd)
 end
-shutdown(sock::IO, save::Bool)                             = ( write(sock, redis_type(["SHUTDOWN", save ? "SAVE" : "NOSAVE"]));   readall(sock); close(sock);          "" )
-shutdown(sock::IO)                                         = ( write(sock, redis_type(["SHUTDOWN"]));                             readall(sock); close(sock);          "" )
+shutdown(sock::IO, save::Bool)                             = ( write(sock, redis_type(["SHUTDOWN", save ? "SAVE" : "NOSAVE"]));   read(sock, all=true); close(sock);          "" )
+shutdown(sock::IO)                                         = ( write(sock, redis_type(["SHUTDOWN"]));                             read(sock, all=true); close(sock);          "" )
 function shutdown(sock::IO, save::AbstractString)
 	if lowercase(save) == "save"
 		shutdown(sock, true)
@@ -271,7 +275,7 @@ function quit(sock::IO)
 	r
 end
 # TODO: consider adding a select method which can run one specific command on the specified database
-select!(sock::IO,       index::Int64)                                                                      =  send(sock, "SELECT",       string(index))
+select!(sock::IO,       index::Integer)                                                                      =  send(sock, "SELECT",       string(index))
 #TODO: client side current database; would need to change how we connect though, to keep track of this.
 #current(sock::IO)                        =  ( sock.database )
 
@@ -286,15 +290,15 @@ function exists(client::IO,        keys::AbstractString...)
 		sum([send(client, "EXISTS",  key) for key in keys])
 #	end
 end
-expire(sock::IO,        key::AbstractString,                  by::Int64)                                           =  send(sock, "EXPIRE",       key,                string(by))
-expireat(sock::IO,      key::AbstractString,                  when::Int64)                                         =  send(sock, "EXPIREAT",     key,                string(when))
+expire(sock::IO,        key::AbstractString,                  by::Integer)                                           =  send(sock, "EXPIRE",       key,                string(by))
+expireat(sock::IO,      key::AbstractString,                  when::Integer)                                         =  send(sock, "EXPIREAT",     key,                string(when))
 keys(sock::IO,          matching::AbstractString="*")                                                              =  send(sock, "KEYS",         matching)
 #migrate
-move(sock::IO,          key::AbstractString,                  index::Int64)                                        =  send(sock, "MOVE",         key,                string(index))
+move(sock::IO,          key::AbstractString,                  index::Integer)                                        =  send(sock, "MOVE",         key,                string(index))
 #object
 persist(sock::IO,       key::AbstractString)                                                                       =  send(sock, "PERSIST",      key)
-pexpire(sock::IO,       key::AbstractString,                  when::Int64)                                         =  send(sock, "PEXPIRE",      key,                string(when))
-pexpireat(sock::IO,     key::AbstractString,                  when::Int64)                                         =  send(send, "PEXPIREAT",    key,                string(when))
+pexpire(sock::IO,       key::AbstractString,                  when::Integer)                                         =  send(sock, "PEXPIRE",      key,                string(when))
+pexpireat(sock::IO,     key::AbstractString,                  when::Integer)                                         =  send(send, "PEXPIREAT",    key,                string(when))
 pttl(sock::IO,          key::AbstractString)                                                                       =  send(sock, "PTTL",         key)
 randomkey(sock::IO)                                                                                        =  send(sock, "RANDOMKEY")
 rename(sock::IO,        key::AbstractString,                  newkey::AbstractString;     not_exists=false)                =  send(sock, "RENAME",       key,                 newkey)
@@ -316,28 +320,28 @@ typeof(sock::IO,        key::AbstractString)                                    
 #!string group
 append(sock::IO,        key::AbstractString,                  val::AbstractString)                                        = send(sock,        "APPEND",           key,             val)
 
-bitcount(sock::IO,      key::AbstractString,                  start::Int64=0,     nd::Int64=-1)                   = send(sock,        "BITCOUNT",         key,             string(start), string(nd))
+bitcount(sock::IO,      key::AbstractString,                  start::Integer=0,     nd::Integer=-1)                   = send(sock,        "BITCOUNT",         key,             string(start), string(nd))
 bitop(sock::IO,         op::AbstractString,                   destkey::AbstractString,    key::AbstractString...)                 = send(sock,        "BITOP",            op,              destkey,       key...)
-bitpos(sock::IO,        key::AbstractString,                  bit::Int,           start::Int64=0,  nd::Int64=-1)  = send(sock,        "BITPOS",           key,             string(bit),   string(start),  string(nd))
+bitpos(sock::IO,        key::AbstractString,                  bit::Int,           start::Integer=0,  nd::Integer=-1)  = send(sock,        "BITPOS",           key,             string(bit),   string(start),  string(nd))
 getbit(sock::IO,        key::AbstractString,                  bit::Int)                                           = send(sock,        "GETBIT",           key,             string(bit))
 setbit(sock::IO,        key::AbstractString,                  bit::Int,           value::Any)                     = send(sock,        "SETBIT",           key,             string(bit),   string(value))
 
 decr(sock::IO,          key::AbstractString)                                                                      = send(sock,        "DECR",             key)
-decrby(sock::IO,        key::AbstractString,                  by::Int64)                                          = send(sock,        "DECRBY",           key,             string(by))
-decrby(sock::IO,        key::AbstractString,                  by::Float64)                                        = incrbyfloat(sock, key,                -1by)
-decrbyfloat(sock::IO,   key::AbstractString,                  by::Float64)                                        = incrbyfloat(sock, key,                -1by)
+decrby(sock::IO,        key::AbstractString,                  by::Integer)                                          = send(sock,        "DECRBY",           key,             string(by))
+decrby(sock::IO,        key::AbstractString,                  by::AbstractFloat)                                        = incrbyfloat(sock, key,                -1by)
+decrbyfloat(sock::IO,   key::AbstractString,                  by::AbstractFloat)                                        = incrbyfloat(sock, key,                -1by)
 incr(sock::IO,          key::AbstractString)                                                                      = send(sock,        "INCR",             key)
-incrby(sock::IO,        key::AbstractString,                  by::Float64)                                        = send(sock,        "INCRBYFLOAT",      key,             string(by))
-incrby(sock::IO,        key::AbstractString,                  by::Int64)                                          = send(sock,        "INCRBY",           key,             string(by))
+incrby(sock::IO,        key::AbstractString,                  by::AbstractFloat)                                        = send(sock,        "INCRBYFLOAT",      key,             string(by))
+incrby(sock::IO,        key::AbstractString,                  by::Integer)                                          = send(sock,        "INCRBY",           key,             string(by))
 incrbyfloat(sock::IO,   key::AbstractString,                  by::Real)                                           = send(sock,        "INCRBYFLOAT",      key,             string(by))
 
-getrange(sock::IO,      key::AbstractString,                  start::Int64,       nd::Int64)                      = send(sock,        "GETRANGE",         key,             string(start), string(nd))
-setrange(sock::IO,      key::AbstractString,                  start::Int64,       value::Any)                     = send(sock,        "SETRANGE",         key,             string(start),        string(value))
+getrange(sock::IO,      key::AbstractString,                  start::Integer,       nd::Integer)                      = send(sock,        "GETRANGE",         key,             string(start), string(nd))
+setrange(sock::IO,      key::AbstractString,                  start::Integer,       value::Any)                     = send(sock,        "SETRANGE",         key,             string(start),        string(value))
 getset(sock::IO,        key::AbstractString,                  val::AbstractString)                                        = send(sock,        "GETSET",           key,             val)
 
 get(sock::IO,           key::AbstractString)                                                                      = send(sock,        "GET",              key)
 get(sock::IO,           key::Char)                                                                        = get(sock,         string(key))
-get(sock::IO,           key::Int64)                                                                       = get(sock,         string(key))
+get(sock::IO,           key::Integer)                                                                       = get(sock,         string(key))
 
 
 mget(sock::IO,          keys::Array;                  sorted=false)                                       = ( r =      send(sock, "MGET",   map(string, keys));        sorted ? sort(r) : r )
@@ -376,7 +380,7 @@ function set(sock::IO,  keys::Array)
 end
 
 set(sock::IO,     key::AbstractString,      val::Char)                     = set(sock,  key,               string(val))
-set(sock::IO,     key::AbstractString,      val::Int64)                    = set(sock,  key,               string(val))
+set(sock::IO,     key::AbstractString,      val::Integer)                    = set(sock,  key,               string(val))
 set(sock::IO,     key_val::Any...)                                 = set(sock,  map(string, key_val))
 setex(sock::IO,   key::AbstractString,      seconds::Int,      value::Any) = set(sock,  key,               value,        sec_expire=seconds)
 setnx(sock::IO,   key::AbstractString,      value::Any)                    = set(sock,  key,               value,        not_exists=true)
@@ -392,12 +396,12 @@ hget(sock::IO,         key::AbstractString,  fields::Array)                     
 hgetall(sock::IO,      key::AbstractString)                                                              = send(sock,         "HGETALL",      key)
 
 hdecr(sock::IO,        key::AbstractString,  field::AbstractString)                                              = hincrby(sock,      key,            field, -1)
-hdecrby(sock::IO,      key::AbstractString,  field::AbstractString,     by::Int64)                               = send(sock,         "HINCRBY",      key,   field,        string(-1by))
-hdecrby(sock::IO,      key::AbstractString,  field::AbstractString,     by::Float64)                             = hincrbyfloat(sock, key,            field, -1by)
+hdecrby(sock::IO,      key::AbstractString,  field::AbstractString,     by::Integer)                               = send(sock,         "HINCRBY",      key,   field,        string(-1by))
+hdecrby(sock::IO,      key::AbstractString,  field::AbstractString,     by::AbstractFloat)                             = hincrbyfloat(sock, key,            field, -1by)
 hdecrbyfloat(sock::IO, key::AbstractString,  field::AbstractString,     by::Real)                                = send(sock,         "HINCRBYFLOAT", key,   field,        string(-1by))
 hincr(sock::IO,        key::AbstractString,  field::AbstractString)                                              = hincrby(sock,      key,            field, 1)
-hincrby(sock::IO,      key::AbstractString,  field::AbstractString,     by::Int64)                               = send(sock,         "HINCRBY",      key,   field,        string(by))
-hincrby(sock::IO,      key::AbstractString,  field::AbstractString,     by::Float64)                             = hincrbyfloat(sock, key,            field, by)
+hincrby(sock::IO,      key::AbstractString,  field::AbstractString,     by::Integer)                               = send(sock,         "HINCRBY",      key,   field,        string(by))
+hincrby(sock::IO,      key::AbstractString,  field::AbstractString,     by::AbstractFloat)                             = hincrbyfloat(sock, key,            field, by)
 hincrbyfloat(sock::IO, key::AbstractString,  field::AbstractString,     by::Real)                                = send(sock,         "HINCRBYFLOAT", key,   field,        string(by))
 
 hkeys(sock::IO,        key::AbstractString;  sorted=false)                                               = ( r = send(sock,   "HKEYS",        key);  sorted ?      sort(r) : r )
@@ -433,14 +437,14 @@ sismember(sock::IO,     key::AbstractString,                 smem::Any)         
 smembers(sock::IO,      key::AbstractString)                                                                            =  send(sock, "SMEMBERS",     key)
 smove(sock::IO,         source::AbstractString,              destination::AbstractString,  member::Any)                         =  send(sock, "SMOVE",        source,      destination,             member)
 spop(sock::IO,          key::AbstractString)                                                                            =  send(sock, "SPOP",         key)
-spop(sock::IO,          key::AbstractString,                 count::Int64)                                              = ( Set([ send(sock, "SPOP",  key)     for i = 1:count ]) )
-#spop(sock::IO,          key::AbstractString,                 count::Int64)                                              =  send(sock, "SPOP",         key,         string(count))
+spop(sock::IO,          key::AbstractString,                 count::Integer)                                              = ( Set([ send(sock, "SPOP",  key)     for i = 1:count ]) )
+#spop(sock::IO,          key::AbstractString,                 count::Integer)                                              =  send(sock, "SPOP",         key,         string(count))
 # Because, according to the documentation, this feature hasn't yet been implemented server side
 # we'll fake it for now so our tests work.
 srandmember(sock::IO,   key::AbstractString)                                                                            =  send(sock, "SRANDMEMBER",  key)
-srandmember(sock::IO,   key::AbstractString,                 count::Int64)                                              =  send(sock, "SRANDMEMBER",  key,         string(count))
+srandmember(sock::IO,   key::AbstractString,                 count::Integer)                                              =  send(sock, "SRANDMEMBER",  key,         string(count))
 srem(sock::IO,          key::AbstractString,                 members::AbstractString...)                                        =  send(sock, "SREM",         key,         members...)
-#sscan(sock::IO,        key::AbstractString,                 cursor::Int64;        matching::Regex="",  count::Int64=-1) =  send(sock, "SSCAN",        key,         cursor,      matching,  count)
+#sscan(sock::IO,        key::AbstractString,                 cursor::Integer;        matching::Regex="",  count::Integer=-1) =  send(sock, "SSCAN",        key,         cursor,      matching,  count)
 sunion(sock::IO,        key::AbstractString,                 members::Any...)                                           =  send(sock, "SUNION",       key,         members...)
 sunionstore(sock::IO,   destination::AbstractString,         key::AbstractString,          keys::AbstractString...)                     =  send(sock, "SUNIONSTORE",  destination, key,                     keys...)
 #!end sets
@@ -508,7 +512,7 @@ zscore(sock::IO,   key::AbstractString,  member::AbstractString)                
 #blpop
 #brpop
 #brpoplpush
-lindex(sock::IO, key::AbstractString, index::Int64)                                              = send(sock,  "LINDEX",    key,       string(index))
+lindex(sock::IO, key::AbstractString, index::Integer)                                              = send(sock,  "LINDEX",    key,       string(index))
 type InvalidInsertionMethodException <: Exception
 	retail::AbstractString
 end
@@ -522,55 +526,60 @@ end
 llen(sock::IO,       key::AbstractString)                                                        = send(sock,   "LLEN",      key)
 lpop(sock::IO,       key::AbstractString)                                                        = send(sock,   "LPOP",      key)
 
-function lpush(sock::IO, key::AbstractString, values::Array; if_exists::Bool=false)
-	if if_exists
-		res = send(sock, "LPUSHX", key, shift!(values))
-		res == 0 && return 0
-		length(values) == 0 && return res
+function cmd_push_dir(c::String,   exists=false)
+	if c in ["l", "left", "front", "head"] 
+		return exists ? "LPUSHX" : "LPUSH"
+	elseif c in ["r", "right", "end"]
+		return exists ? "RPUSHX" : "RPUSH"
 	end
-	send(sock,   "LPUSH", key, map(string, values)...)
 end
-#lpush(sock::IO,     key::AbstractString,   values::Array{AbstractString};       if_exists::Bool=false)  = send(sock,   if_exists ?  "LPUSHX" : "LPUSH",           key,                 values...)
-lpush(sock::IO,      key::AbstractString,   value::AbstractString;               if_exists::Bool=false)  = lpush(sock,  key,         [value],                      if_exists=if_exists)
-#lpush(sock::IO,     key::AbstractString,   values::Array;               if_exists::Bool=false)  = lpush(sock,  key,         map(string, values), if_exists=if_exists)
-lpush(sock::IO,      key::AbstractString,   values::Any...;              if_exists::Bool=false)  = lpush(sock,  key,         map(string, values), if_exists=if_exists)
 
-lpushx(sock::IO,     key::AbstractString,   value::AbstractString)                                       = lpush(sock,  key,         value,     if_exists=true)
-
-lrange(sock::IO,     key::AbstractString,   start::Int64,                stop::Int64)            = send(sock,   "LRANGE",    key,       string(start),     string(stop))
-lrem(sock::IO,       key::AbstractString,   count::Int64,                value::AbstractString)          = send(sock,   "LREM",      key,       string(count),     value)
-lset(sock::IO,       key::AbstractString,   index::Int64,                value::AbstractString)          = send(sock,   "LSET",      key,       string(index),     value)
-ltrim(sock::IO,      key::AbstractString,   start::Int64,                stop::Int64)            = send(sock,   "LTRIM",     key,       string(start),     string(stop))
-rpop(sock::IO,       key::AbstractString)                                                        = send(sock,   "RPOP",      key)
-rpoplpush(sock::IO,  skey::AbstractString,  dkey::AbstractString)                                        = send(sock,   "RPOPLPUSH", skey,      dkey)
-
-function rpush(sock::IO, key::AbstractString, values::Array; if_exists::Bool=false)
-	if if_exists
-		res = send(sock, "RPUSHX", key, shift!(values))
-		res == 0 && return 0
-		length(values) == 0 && return res
+function cmd_push_dir(c::Char,     exists=false)
+	if c in ['l', 'f', 'h']
+		return exists ? "LPUSHX" : "LPUSH"
+	elseif c in ['r', 'e']
+		return exists ? "RPUSHX" : "RPUSH"
 	end
-	send(sock,   "RPUSH", key, map(string, values)...)
 end
-#rpush(sock::IO,     key::AbstractString,   values::Array{AbstractString};       if_exists::Bool=false)  = send(sock,   if_exists ?  "RPUSHX" : "RPUSH", key,      values...)
-rpush(sock::IO,      key::AbstractString,   value::AbstractString;               if_exists::Bool=false)  = rpush(sock,  key,         [value],                      if_exists=if_exists)
-#rpush(sock::IO,     key::AbstractString,   values::Array;               if_exists::Bool=false)  = rpush(sock,  key,         map(string, values), if_exists=if_exists)
-rpush(sock::IO,      key::AbstractString,   values::Any...;              if_exists::Bool=false)  = rpush(sock,  key,         map(string, values), if_exists=if_exists)
 
-rpushx(sock::IO,     key::AbstractString,   value::AbstractString)                               = rpush(sock,  key,         value,     if_exists=true)
+function cmd_push_dir(c::Symbol, exists=false)
+	if c in [:left, :front, :head]
+		return exists ? "LPUSHX" : "LPUSH"
+	elseif c in [:right, :end]
+		return exists ? "RPUSHX" : "RPUSH"
+	end
+end
+
+function push(sock::IO, key::AbstractString, values::Any...; dir=:left, if_exists::Bool=false)
+	cmd = cmd_push_dir(isa(dir, Symbol) ? dir : lowercase(dir), if_exists)
+	if if_exists
+		res = map(value -> send(sock, cmd, key, string(value)), values)
+		return isa(res, AbstractArray) ? sort(res)[end] : isa(res, Tuple) ? res[end] : res
+	else
+		send(sock, cmd, key, map(string, values)...)
+	end
+end
+
+lpush(sock::IO,      key::AbstractString,   values::AbstractArray; if_exists=false)              = push(sock, key, values..., dir=:left, if_exists=if_exists);
+lpush(sock::IO,      key::AbstractString,   values::Any...;        if_exists=false)              = push(sock, key, values..., dir=:left, if_exists=if_exists);
+lpushx(sock::IO,     key::AbstractString,   values::Any...)                                      = push(sock, key, values..., dir=:left, if_exists=true);
+
+rpush(sock::IO,      key::AbstractString,   values::AbstractArray; if_exists=false)              = push(sock, key, values..., dir=:right, if_exists=if_exists);
+rpush(sock::IO,      key::AbstractString,   values::Any...;        if_exists=false)              = push(sock, key, values..., dir=:right, if_exists=if_exists);
+rpushx(sock::IO,     key::AbstractString,   values::Any...)                                      = push(sock, key, values..., dir=:right, if_exists=true);
+
+lrange(sock::IO,     key::AbstractString,   start::Integer,                stop::Integer)                  = send(sock,   "LRANGE",    key,       string(start),     string(stop))
+lrem(sock::IO,       key::AbstractString,   count::Integer,                value::AbstractString)          = send(sock,   "LREM",      key,       string(count),     value)
+lset(sock::IO,       key::AbstractString,   index::Integer,                value::AbstractString)          = send(sock,   "LSET",      key,       string(index),     value)
+ltrim(sock::IO,      key::AbstractString,   start::Integer,                stop::Integer)                  = send(sock,   "LTRIM",     key,       string(start),     string(stop))
+rpop(sock::IO,       key::AbstractString)                                                                  = send(sock,   "RPOP",      key)
+rpoplpush(sock::IO,  skey::AbstractString,  dkey::AbstractString)                                          = send(sock,   "RPOPLPUSH", skey,      dkey)
 
 # client only commands (w/ some help from the core method definitions)
-lpop(sock::IO,       key::AbstractString,   count::Int64)                                        = [lpop(sock,  key) for i = 1:count]
-lrange(sock::IO,     key::AbstractString)                                                        = lrange(sock, key, 0, -1)
-rpop(sock::IO,       key::AbstractString,   count::Int64)                                        = [rpop(sock,  key) for i = 1:count]
+lpop(sock::IO,       key::AbstractString,   count::Integer)                                        = [lpop(sock,  key) for i = 1:count]
+lrange(sock::IO,     key::AbstractString)                                                          = lrange(sock, key, 0, -1)
+rpop(sock::IO,       key::AbstractString,   count::Integer)                                        = [rpop(sock,  key) for i = 1:count]
 
-#lpushx(sock::IO,    key::AbstractString,   values::Array{AbstractString})                       = lpush(sock,  key,         values,                       if_exists=true)
-#lpushx(sock::IO,    key::AbstractString,   values::Array)                                       = lpush(sock,  key,         map(string, values), if_exists=true)
-lpushx(sock::IO,     key::AbstractString,   values::Any...)                                      = lpush(sock,  key,         map(string, values), if_exists=true)
-#
-#rpushx(sock::IO,    key::AbstractString,   values::Array{AbstractString})                       = rpush(sock,  key,         values,                       if_exists=true)
-#rpushx(sock::IO,    key::AbstractString,   values::Array)                                       = rpush(sock,  key,         map(string, values), if_exists=true)
-rpushx(sock::IO,     key::AbstractString,   values::Any...)                                      = rpush(sock,  key,         map(string, values), if_exists=true)
 #!end lists
 
 #!scripting group
@@ -618,7 +627,7 @@ bgsave(sock::IO)                          =  save(sock, background=true)
 #config rewrite
 #config set
 dbsize(sock::IO)                          =  send(sock, "DBSIZE")
-#function dbsize(sock::IO, index::Int64) 
+#function dbsize(sock::IO, index::Integer) 
 #	cdb = current(sock)
 #	select!(sock, index)
 #	r = send(sock, "DBSIZE")
