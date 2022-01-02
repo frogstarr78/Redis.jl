@@ -11,8 +11,6 @@ end
 
 pwd_files = readdir(pwd())
 
-println("Running tests:")
-
 for test_file in filter(only_julia_test_files, pwd_files)
 	test_name, ext = splitext(test_file)
 	@printf " %s\n" join(split(test_name, '_')[1:end-1], '_')

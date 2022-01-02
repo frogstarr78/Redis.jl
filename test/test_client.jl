@@ -6,7 +6,7 @@ function test_clean_client_with(cb::Function)
 	end
 	run(`redis-server $[pwd()]/etc/redis.conf`)
 	sleep(1)
-	open(readall, `redis-cli -p 9999 FLUSHALL`)
+	open(read, `redis-cli -p 9999 FLUSHALL`)
 	io = Union
 	try 
 		io = client(port=9999)
